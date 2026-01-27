@@ -10,16 +10,30 @@ on:
     - cron: '30 22 * * *'  # Summer time (IDT)
     - cron: '30 23 * * *'  # Winter time (IST)
 
-  # Allow manual trigger for testing
+  # Allow manual trigger for testing (owner only via GitHub UI)
   workflow_dispatch:
+
+# Security: Restrict workflow permissions to absolute minimum
+permissions:
+  contents: read  # Only read repository files, cannot modify
+
+# Security: Prevent concurrent runs to avoid duplicate messages
+concurrency:
+  group: daily-video
+  cancel-in-progress: false
 
 jobs:
   send-video:
     runs-on: ubuntu-latest
 
+    # Security: Set timeout to prevent runaway processes
+    timeout-minutes: 5
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false  # Security: Don't store git credentials
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -28,7 +42,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install httpx beautifulsoup4 python-telegram-bot
+          pip install --no-cache-dir httpx beautifulsoup4 python-telegram-bot
 
       - name: Send daily video
         env:
