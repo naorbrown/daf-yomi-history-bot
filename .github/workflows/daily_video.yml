@@ -1,0 +1,38 @@
+name: Send Daily Daf Yomi History Video
+
+on:
+  schedule:
+    # 1:30 AM Israel time (IST is UTC+2, or UTC+3 during DST)
+    # Israel uses DST from late March to late October
+    # Winter (Nov-Mar): 1:30 AM IST = 23:30 UTC previous day
+    # Summer (Apr-Oct): 1:30 AM IDT = 22:30 UTC previous day
+    # We'll run at both times to cover both cases - the script checks the actual date
+    - cron: '30 22 * * *'  # Summer time (IDT)
+    - cron: '30 23 * * *'  # Winter time (IST)
+
+  # Allow manual trigger for testing
+  workflow_dispatch:
+
+jobs:
+  send-video:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install httpx beautifulsoup4 python-telegram-bot
+
+      - name: Send daily video
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python send_video.py
