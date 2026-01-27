@@ -1,78 +1,128 @@
 # Daf Yomi History Bot
 
-A Telegram bot that delivers daily Jewish History videos from [AllDaf.org](https://alldaf.org)'s "Jewish History in Daf Yomi" series by Dr. Henry Abramson.
+A Telegram bot that delivers daily Jewish History videos from [AllDaf.org](https://alldaf.org)'s series by Dr. Henry Abramson, matching the Daf Yomi schedule.
 
 [![Daily Video](https://github.com/naorbrown/daf-yomi-history-bot/actions/workflows/daily_video.yml/badge.svg)](https://github.com/naorbrown/daf-yomi-history-bot/actions/workflows/daily_video.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-## Overview
+---
 
-Every morning at 1:30 AM Israel Time, this bot automatically:
+## 🚀 Start Using the Bot
 
-1. Fetches the current Daf Yomi from [Hebcal's API](https://www.hebcal.com/home/developer-apis)
-2. Finds the corresponding Jewish History video on AllDaf.org
-3. Sends the video directly to your Telegram chat
+**Open Telegram and start chatting:**
 
-## Features
+1. **Open Telegram** on your phone or computer
+2. **Search for** `@DafHistoryBot`
+3. **Tap Start**
 
-- **Embedded Video Delivery** — Videos play directly in Telegram, no external links needed
-- **Accurate Calendar** — Uses Hebcal API with Israel timezone for correct daily daf
-- **Reliable Scheduling** — Runs via GitHub Actions, works 24/7 without any server
-- **Zero Maintenance** — Set it up once, receive videos forever
+That's it! You'll receive a daily video at 1:30 AM Israel time.
 
-## Quick Start
+> **Quick link:** [t.me/DafHistoryBot](https://t.me/DafHistoryBot)
+
+---
+
+## 📱 Bot Commands
+
+| Command | What It Does |
+|---------|--------------|
+| `/start` | Welcome message and instructions |
+| `/today` | Get today's Daf Yomi history video |
+| `/help` | Show all available commands |
+
+---
+
+## ❓ FAQ
+
+### What is this bot?
+
+This bot sends you a short Jewish History video every day, matching the Daf Yomi learning schedule. The videos are from Dr. Henry Abramson's series on AllDaf.org.
+
+### When do I get videos?
+
+- **Automatically** every day at 1:30 AM Israel time
+- **On-demand** anytime by sending `/today`
+
+### Is it free?
+
+Yes, completely free. No ads, no subscriptions, no catches.
+
+### Do I need to do anything after starting?
+
+No! Just tap Start once, and you'll receive videos automatically every day.
+
+---
+
+## 🛠 For Developers
+
+Want to run your own instance? See the [Developer Guide](#developer-guide) below.
+
+---
+
+## Developer Guide
 
 ### Prerequisites
 
 - A Telegram account
 - A GitHub account
 
-### Setup
+### Quick Setup
 
-1. **Fork this repository**
+#### 1. Fork This Repository
 
-2. **Create a Telegram Bot**
-   - Message [@BotFather](https://t.me/BotFather) on Telegram
-   - Send `/newbot` and follow the prompts
-   - Save the bot token (e.g., `123456789:ABCdefGHI...`)
+Click the **Fork** button at the top right.
 
-3. **Get your Chat ID**
-   - Start a chat with your new bot
-   - Send any message
-   - Visit `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates`
-   - Find `"chat":{"id":123456789}` — that number is your Chat ID
+#### 2. Create a Telegram Bot
 
-4. **Add GitHub Secrets**
-   - Go to your fork's Settings → Secrets and variables → Actions
-   - Add two secrets:
-     - `TELEGRAM_BOT_TOKEN`: Your bot token
-     - `TELEGRAM_CHAT_ID`: Your chat ID
+1. Message [@BotFather](https://t.me/BotFather) on Telegram
+2. Send `/newbot`
+3. Choose a name and username
+4. Save the **bot token**
 
-5. **Enable GitHub Actions**
-   - Go to the Actions tab in your fork
-   - Click "I understand my workflows, go ahead and enable them"
+#### 3. Get Your Chat ID
 
-That's it! You'll receive your first video at 1:30 AM Israel Time.
+1. Message your new bot
+2. Visit: `https://api.telegram.org/bot<TOKEN>/getUpdates`
+3. Find your Chat ID in the response
 
-### Manual Trigger
+#### 4. Add GitHub Secrets
 
-To test immediately or send a video on-demand:
+Go to your fork → **Settings** → **Secrets and variables** → **Actions**
+
+| Secret Name | Value |
+|-------------|-------|
+| `TELEGRAM_BOT_TOKEN` | Your bot token |
+| `TELEGRAM_CHAT_ID` | Your chat ID |
+
+#### 5. Enable GitHub Actions
+
+Go to **Actions** tab → Enable workflows
+
+✅ Done! Videos will be sent daily at 1:30 AM Israel time.
+
+### Running the Interactive Bot
+
+The `/today` command requires the bot to run continuously. To enable it:
 
 ```bash
-gh workflow run daily_video.yml
+# Install dependencies
+pip install httpx beautifulsoup4 python-telegram-bot
+
+# Set your token
+export TELEGRAM_BOT_TOKEN="your-token-here"
+
+# Run the bot
+python bot.py
 ```
 
-Or use the GitHub Actions UI: Actions → Send Daily Daf Yomi History Video → Run workflow
+Options for hosting:
+- **Local machine** (must stay running)
+- **Raspberry Pi** (low-power, always-on)
+- **Free cloud tier** (Railway, Render, Fly.io)
 
-## Configuration
+---
 
-| Environment Variable | Description | Required |
-|---------------------|-------------|----------|
-| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather | Yes |
-| `TELEGRAM_CHAT_ID` | Your Telegram chat ID | Yes |
-
-## Architecture
+## 📖 How It Works
 
 ```
 ┌─────────────────┐     ┌─────────────┐     ┌─────────────┐     ┌──────────┐
@@ -81,89 +131,70 @@ Or use the GitHub Actions UI: Actions → Send Daily Daf Yomi History Video → 
 └─────────────────┘     └─────────────┘     └─────────────┘     └──────────┘
 ```
 
-## API Dependencies
+---
 
-- **[Hebcal API](https://www.hebcal.com/home/developer-apis)** — Jewish calendar data (free, no auth required)
-- **[AllDaf.org](https://alldaf.org)** — Video content from the OU's Torah learning platform
-- **[Telegram Bot API](https://core.telegram.org/bots/api)** — Message delivery
+## 💰 Cost
 
-## Development
+**Free. Forever.**
 
-### Local Testing
+| Service | Cost |
+|---------|------|
+| GitHub Actions | Free (public repos) |
+| Hebcal API | Free |
+| AllDaf.org | Free |
+| Telegram Bot API | Free |
 
-```bash
-# Clone the repository
-git clone https://github.com/naorbrown/daf-yomi-history-bot.git
-cd daf-yomi-history-bot
+---
 
-# Install dependencies
-pip install -r requirements.txt
+## 🔒 Security
 
-# Set environment variables
-export TELEGRAM_BOT_TOKEN="your-token"
-export TELEGRAM_CHAT_ID="your-chat-id"
+Zero-attack-surface architecture:
 
-# Run the script
-python send_video.py
-```
+- ❌ No server running (for GitHub Actions version)
+- ❌ No webhooks or open ports
+- ❌ No database
+- ✅ Only outbound HTTPS requests
 
-### Project Structure
+See [SECURITY.md](SECURITY.md) for details.
 
-```
-├── .github/
-│   └── workflows/
-│       └── daily_video.yml    # GitHub Actions workflow
-├── send_video.py              # Main script for GitHub Actions
-├── daf_yomi_bot.py           # Standalone bot with scheduler (optional)
-├── test_scraper.py           # Test script for debugging
-├── requirements.txt          # Python dependencies
-├── LICENSE                   # MIT License
-└── README.md
-```
+---
 
-## Troubleshooting
+## 📁 Files
 
-### Video not found
+| File | Purpose |
+|------|---------|
+| `send_video.py` | Scheduled sender (GitHub Actions) |
+| `bot.py` | Interactive bot (responds to /today) |
+| `daily_video.yml` | GitHub Actions workflow |
 
-The AllDaf website occasionally changes structure. If the bot fails to find a video:
+---
 
-1. Check the [Actions logs](../../actions) for error details
-2. Verify the video exists on [AllDaf's Jewish History series](https://alldaf.org/series/3940)
-3. Open an issue with the masechta and daf number
+## 🐛 Troubleshooting
 
-### Wrong daf
+**Video not found** — The video may not exist for today's daf yet. Check [AllDaf](https://alldaf.org/series/3940).
 
-The bot uses Israel timezone. If the daf seems off:
+**Wrong daf** — Bot uses Israel timezone. Verify at [Hebcal](https://www.hebcal.com/sedrot).
 
-1. Check the current time in Israel
-2. Verify against [Hebcal's calendar](https://www.hebcal.com/sedrot)
+---
 
-### Bot not responding
+## 🤝 Contributing
 
-1. Verify your bot token is correct
-2. Ensure you've started a chat with the bot
-3. Check that the Chat ID matches your conversation
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Contributing
+---
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## 📜 License
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+MIT — see [LICENSE](LICENSE).
 
-## License
+---
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+## 🙏 Acknowledgments
 
-## Acknowledgments
+- [AllDaf.org](https://alldaf.org) & the Orthodox Union
+- [Dr. Henry Abramson](https://www.henryabramson.com/)
+- [Hebcal](https://www.hebcal.com/)
 
-- [AllDaf.org](https://alldaf.org) and the Orthodox Union for the Jewish History video series
-- [Dr. Henry Abramson](https://www.henryabramson.com/) for creating the Jewish History in Daf Yomi content
-- [Hebcal](https://www.hebcal.com/) for their excellent Jewish calendar API
+---
 
-## Disclaimer
-
-This project is not affiliated with AllDaf.org, the Orthodox Union, or Hebcal. It simply provides a convenient way to receive publicly available educational content via Telegram.
+*Not affiliated with AllDaf.org, the Orthodox Union, or Hebcal.*
