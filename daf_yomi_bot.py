@@ -10,7 +10,7 @@ import asyncio
 import logging
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -166,7 +166,8 @@ async def get_jewish_history_video(masechta: str, daf: int) -> dict:
                 parent = link.find_parent(['div', 'li', 'section'])
                 if parent:
                     parent_text = parent.get_text().lower()
-                    if 'jewish history' in parent_text or 'abramson' in parent_text or 'henry' in parent_text:
+                    history_indicators = ('jewish history', 'abramson', 'henry')
+                    if any(ind in parent_text for ind in history_indicators):
                         link_text = link.get_text().strip()
                         if link_text and masechta_lower in link_text.lower():
                             page_url = f"{ALLDAF_BASE_URL}{href}"
@@ -174,7 +175,9 @@ async def get_jewish_history_video(masechta: str, daf: int) -> dict:
                             break
 
         if not page_url:
-            raise ValueError(f"Could not find Jewish History video for {masechta} {daf}")
+            raise ValueError(
+                f"Could not find Jewish History video for {masechta} {daf}"
+            )
 
         # Now fetch the video page to get the direct MP4 URL
         logger.info(f"Fetching video page: {page_url}")
@@ -185,12 +188,16 @@ async def get_jewish_history_video(masechta: str, daf: int) -> dict:
         video_url = None
 
         # Look for mp4 URL patterns
-        mp4_match = re.search(r'https://(?:cdn\.jwplayer\.com|content\.jwplatform\.com)/videos/([a-zA-Z0-9]+)\.mp4', response.text)
+        mp4_pattern = (
+            r'https://(?:cdn\.jwplayer\.com|content\.jwplatform\.com)'
+            r'/videos/([a-zA-Z0-9]+)\.mp4'
+        )
+        mp4_match = re.search(mp4_pattern, response.text)
         if mp4_match:
             video_url = f"https://cdn.jwplayer.com/videos/{mp4_match.group(1)}.mp4"
 
         if not video_url:
-            logger.warning(f"Could not find direct video URL, falling back to page URL")
+            logger.warning("Could not find direct video URL, falling back to page URL")
 
         return {
             'title': title,
@@ -213,14 +220,17 @@ async def send_daily_video():
         logger.info(f"Today's daf: {daf_info['masechta']} {daf_info['daf']}")
 
         # Get the Jewish History video
-        video_info = await get_jewish_history_video(daf_info['masechta'], daf_info['daf'])
+        video_info = await get_jewish_history_video(
+            daf_info['masechta'], daf_info['daf']
+        )
         logger.info(f"Found video: {video_info['title']}")
 
         # Format caption
         caption = (
             f"📚 *Today's Daf Yomi History*\n\n"
             f"*{video_info['masechta']} {video_info['daf']}*\n"
-            f"{video_info['title']}"
+            f"{video_info['title']}\n\n"
+            f"[View on AllDaf.org]({video_info['page_url']})"
         )
 
         # Send via Telegram
@@ -238,10 +248,9 @@ async def send_daily_video():
             )
         else:
             # Fallback to sending a link if we couldn't get the video URL
-            message = f"{caption}\n\n[Watch the video]({video_info['page_url']})"
             await bot.send_message(
                 chat_id=TELEGRAM_CHAT_ID,
-                text=message,
+                text=caption,
                 parse_mode='Markdown',
                 disable_web_page_preview=False
             )
@@ -257,7 +266,7 @@ async def send_daily_video():
                 chat_id=TELEGRAM_CHAT_ID,
                 text=f"Error fetching today's Daf Yomi History video: {str(e)}"
             )
-        except:
+        except Exception:
             pass
 
 

@@ -6,6 +6,7 @@ Fetches the daily Daf Yomi Jewish History video from AllDaf.org
 and sends it to a Telegram chat.
 
 This script is designed to run via GitHub Actions on a daily schedule.
+It includes a time window check to prevent duplicate sends from DST cron jobs.
 """
 
 from __future__ import annotations
@@ -38,6 +39,12 @@ ALLDAF_BASE_URL = "https://alldaf.org"
 ALLDAF_SERIES_URL = f"{ALLDAF_BASE_URL}/series/3940"
 HEBCAL_API_URL = "https://www.hebcal.com/hebcal"
 REQUEST_TIMEOUT = 30.0
+
+# Time window for sending (to prevent duplicates from DST cron jobs)
+# Only send if Israel time is between 5:45 AM and 6:30 AM
+SEND_HOUR = 6
+SEND_WINDOW_MINUTES_BEFORE = 15  # 5:45 AM
+SEND_WINDOW_MINUTES_AFTER = 30   # 6:30 AM
 
 # Masechta name mapping: Hebcal uses different transliterations than AllDaf
 MASECHTA_NAME_MAP: dict[str, str] = {
@@ -100,6 +107,37 @@ class VideoNotFoundError(DafYomiError):
     """Raised when the video cannot be found."""
 
     pass
+
+
+def is_within_send_window() -> bool:
+    """
+    Check if current Israel time is within the send window.
+
+    This prevents duplicate sends when both DST cron jobs run.
+    Only the cron job that runs when it's ~6AM Israel time will actually send.
+
+    Returns:
+        True if within send window, False otherwise
+    """
+    israel_now = datetime.now(ISRAEL_TZ)
+    current_hour = israel_now.hour
+    current_minute = israel_now.minute
+
+    # Convert to minutes since midnight for easier comparison
+    current_minutes = current_hour * 60 + current_minute
+    window_start = SEND_HOUR * 60 - SEND_WINDOW_MINUTES_BEFORE  # 5:45 AM = 345
+    window_end = SEND_HOUR * 60 + SEND_WINDOW_MINUTES_AFTER      # 6:30 AM = 390
+
+    is_within = window_start <= current_minutes <= window_end
+
+    logger.info(
+        f"Israel time: {israel_now.strftime('%H:%M')} - "
+        f"Send window: {window_start // 60}:{window_start % 60:02d} - "
+        f"{window_end // 60}:{window_end % 60:02d} - "
+        f"Within window: {is_within}"
+    )
+
+    return is_within
 
 
 def get_config() -> tuple[str, str]:
@@ -327,6 +365,13 @@ async def main() -> int:
         Exit code (0 for success, 1 for failure)
     """
     try:
+        # Check if we're within the send window (prevents duplicates from DST cron jobs)
+        # Skip SKIP_TIME_CHECK for manual testing or webhook triggers
+        skip_time_check = os.environ.get("SKIP_TIME_CHECK", "").lower() == "true"
+        if not skip_time_check and not is_within_send_window():
+            logger.info("Outside send window - skipping to prevent duplicate sends")
+            return 0
+
         # Get configuration
         bot_token, chat_id = get_config()
 
