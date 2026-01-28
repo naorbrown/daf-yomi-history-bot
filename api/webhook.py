@@ -412,18 +412,55 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(b'{"ok": true}')
 
     def do_GET(self):
-        """Health check endpoint."""
+        """Health check and diagnostics endpoint."""
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
 
-        # Check if bot token is configured
-        token_set = bool(os.environ.get("TELEGRAM_BOT_TOKEN"))
+        # Check configuration
+        token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        token_configured = bool(token)
+        token_preview = f"{token[:8]}...{token[-4:]}" if len(token) > 12 else "NOT SET"
+
+        # Get bot info if token is set
+        bot_info = None
+        webhook_info = None
+        if token_configured:
+            try:
+                # Get bot info
+                bot_url = f"{TELEGRAM_API}{token}/getMe"
+                req = Request(bot_url, method="GET")
+                with urlopen(req, timeout=10) as resp:
+                    bot_info = json.loads(resp.read().decode("utf-8"))
+
+                # Get webhook info
+                webhook_url = f"{TELEGRAM_API}{token}/getWebhookInfo"
+                req = Request(webhook_url, method="GET")
+                with urlopen(req, timeout=10) as resp:
+                    webhook_info = json.loads(resp.read().decode("utf-8"))
+            except Exception as e:
+                logger.error(f"Failed to get bot info: {e}")
 
         response = {
             "status": "ok",
             "bot": "Daf Yomi History Bot",
             "version": "2.1.0",
-            "token_configured": token_set,
+            "config": {
+                "token_configured": token_configured,
+                "token_preview": token_preview,
+            },
+            "telegram": {
+                "bot_info": bot_info.get("result") if bot_info else None,
+                "webhook": webhook_info.get("result") if webhook_info else None,
+            },
+            "instructions": {
+                "setup_webhook": (
+                    "Run: curl 'https://api.telegram.org/bot<TOKEN>/setWebhook"
+                    "?url=https://<YOUR_VERCEL_URL>/api/webhook'"
+                ),
+                "check_webhook": (
+                    "Run: curl 'https://api.telegram.org/bot<TOKEN>/getWebhookInfo'"
+                ),
+            },
         }
-        self.wfile.write(json.dumps(response).encode("utf-8"))
+        self.wfile.write(json.dumps(response, indent=2).encode("utf-8"))
