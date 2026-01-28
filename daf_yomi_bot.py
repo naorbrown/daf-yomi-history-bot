@@ -3,7 +3,7 @@
 Daf Yomi History Telegram Bot
 
 Sends the daily Daf Yomi Jewish History video from alldaf.org
-every morning at 1:30am Israel time.
+every morning at 6:00 AM Israel time.
 """
 
 import asyncio
@@ -275,17 +275,17 @@ async def main():
     # Create scheduler
     scheduler = AsyncIOScheduler(timezone=ISRAEL_TZ)
 
-    # Schedule daily job at 1:30 AM Israel time
+    # Schedule daily job at 6:00 AM Israel time
     scheduler.add_job(
         send_daily_video,
-        CronTrigger(hour=1, minute=30, timezone=ISRAEL_TZ),
+        CronTrigger(hour=6, minute=0, timezone=ISRAEL_TZ),
         id='daily_daf_video',
         name='Send daily Daf Yomi History video',
         replace_existing=True
     )
 
     scheduler.start()
-    logger.info("Scheduler started. Daily video will be sent at 1:30 AM Israel time.")
+    logger.info("Scheduler started. Daily video will be sent at 6:00 AM Israel time.")
 
     # Keep the bot running
     try:

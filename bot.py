@@ -75,7 +75,7 @@ I send you daily Jewish History videos from Dr. Henry Abramson's series on AllDa
 /today — Get today's video now
 /help — Show this message
 
-You'll automatically receive the daily video at 1:30 AM Israel time.
+You'll automatically receive the daily video every morning at 6:00 AM Israel time.
 
 _Enjoy your learning!_ 🎓
 """
@@ -92,7 +92,7 @@ HELP_MESSAGE = """
 This bot sends Jewish History videos from AllDaf.org's series by Dr. Henry Abramson. Each video corresponds to the daily Daf Yomi page.
 
 *Schedule:*
-Daily videos are sent automatically at 1:30 AM Israel time.
+Daily videos are sent automatically at 6:00 AM Israel time.
 
 *Questions?*
 Visit: github.com/naorbrown/daf-yomi-history-bot
