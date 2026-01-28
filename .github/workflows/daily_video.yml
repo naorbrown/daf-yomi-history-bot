@@ -6,19 +6,24 @@ on:
     # Israel uses DST from late March to late October
     # Winter (Nov-Mar): 6:00 AM IST = 04:00 UTC
     # Summer (Apr-Oct): 6:00 AM IDT = 03:00 UTC
-    # Both cron jobs run daily - concurrency ensures only one sends
+    # Both cron jobs run daily - the script checks Israel time and only sends once
     - cron: '0 3 * * *'   # Summer time (IDT): 3:00 UTC = 6:00 AM IDT
     - cron: '0 4 * * *'   # Winter time (IST): 4:00 UTC = 6:00 AM IST
 
   # Allow manual trigger for testing (owner only via GitHub UI)
   workflow_dispatch:
+    inputs:
+      skip_time_check:
+        description: 'Skip time window check (for testing)'
+        required: false
+        default: 'true'
+        type: boolean
 
 # Security: Restrict workflow permissions to absolute minimum
 permissions:
   contents: read  # Only read repository files, cannot modify
 
-# Prevent duplicate sends: cancel any queued/waiting run when a new one starts
-# This fixes the duplicate video bug where both DST cron jobs would send
+# Concurrency group ensures only one workflow runs at a time
 concurrency:
   group: daily-video
   cancel-in-progress: true
@@ -49,5 +54,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Skip time check for manual triggers, enforce for scheduled runs
+          SKIP_TIME_CHECK: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_time_check || 'false' }}
         run: |
           python send_video.py
