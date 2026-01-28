@@ -93,9 +93,6 @@ This bot sends Jewish History videos from AllDaf.org's series by Dr. Henry Abram
 
 *Schedule:*
 Daily videos are sent automatically at 6:00 AM Israel time.
-
-*Questions?*
-Visit: github.com/naorbrown/daf-yomi-history-bot
 """
 
 
@@ -284,6 +281,11 @@ async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle errors in the bot."""
+    logger.error(f"Exception while handling an update: {context.error}")
+
+
 def main() -> None:
     """Start the bot."""
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -298,9 +300,15 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("today", today_command))
 
-    # Start the bot
+    # Add error handler
+    application.add_error_handler(error_handler)
+
+    # Start the bot with drop_pending_updates to avoid conflicts
     logger.info("Starting Daf Yomi History Bot...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+    )
 
 
 if __name__ == "__main__":
