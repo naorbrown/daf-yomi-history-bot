@@ -14,21 +14,18 @@ import os
 import re
 import sys
 import unittest
-from datetime import datetime
-from unittest.mock import MagicMock, patch
-from zoneinfo import ZoneInfo
+from unittest.mock import patch
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from api.webhook import (
+    HELP_MESSAGE,
     MASECHTA_NAME_MAP,
     WELCOME_MESSAGE,
-    HELP_MESSAGE,
     get_todays_daf,
     get_video_info,
     process_update,
-    send_message,
 )
 
 
