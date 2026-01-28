@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import traceback
 from datetime import datetime
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode
@@ -56,28 +57,28 @@ MASECHTA_NAME_MAP = {
     "Niddah": "Nidah",
 }
 
-# Bot messages
+# Bot messages (plain text - no Markdown to avoid parsing issues)
 WELCOME_MESSAGE = (
-    "📚 *Welcome to Daf Yomi History Bot!*\n\n"
+    "📚 Welcome to Daf Yomi History Bot!\n\n"
     "I send you daily Jewish History videos from Dr. Henry Abramson's series "
     "on AllDaf.org, matching the Daf Yomi schedule.\n\n"
-    "*Commands:*\n"
-    "/today — Get today's video now\n"
-    "/help — Show this message\n\n"
+    "Commands:\n"
+    "/today - Get today's video now\n"
+    "/help - Show this message\n\n"
     "You'll automatically receive the daily video every morning at "
     "6:00 AM Israel time.\n\n"
-    "_Enjoy your learning!_ 🎓"
+    "Enjoy your learning! 🎓"
 )
 
 HELP_MESSAGE = (
-    "📖 *Daf Yomi History Bot - Help*\n\n"
-    "*Available Commands:*\n\n"
-    "/today — Get today's Daf Yomi history video\n"
-    "/help — Show this help message\n\n"
-    "*About:*\n"
+    "📖 Daf Yomi History Bot - Help\n\n"
+    "Available Commands:\n\n"
+    "/today - Get today's Daf Yomi history video\n"
+    "/help - Show this help message\n\n"
+    "About:\n"
     "This bot sends Jewish History videos from AllDaf.org's series "
     "by Dr. Henry Abramson. Each video corresponds to the daily Daf Yomi page.\n\n"
-    "*Schedule:*\n"
+    "Schedule:\n"
     "Daily videos are sent automatically at 6:00 AM Israel time."
 )
 
@@ -91,6 +92,7 @@ def get_bot_token() -> str:
     """Get bot token from environment."""
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
+        logger.error("TELEGRAM_BOT_TOKEN not set in environment")
         raise ValueError("TELEGRAM_BOT_TOKEN not set")
     return token
 
@@ -100,31 +102,50 @@ def telegram_api_call(method: str, data: dict) -> dict:
     token = get_bot_token()
     url = f"{TELEGRAM_API}{token}/{method}"
 
+    # Remove None values from data
+    clean_data = {k: v for k, v in data.items() if v is not None}
+
     req = Request(
         url,
-        data=json.dumps(data).encode("utf-8"),
+        data=json.dumps(clean_data).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
 
     try:
         with urlopen(req, timeout=REQUEST_TIMEOUT) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except (URLError, HTTPError) as e:
-        logger.error(f"Telegram API error for {method}: {e}")
+            result = json.loads(response.read().decode("utf-8"))
+            logger.info(f"Telegram API {method} success: {result.get('ok')}")
+            return result
+    except HTTPError as e:
+        error_body = e.read().decode("utf-8") if e.fp else "No response body"
+        logger.error(f"Telegram API HTTP error for {method}: {e.code} - {error_body}")
+        raise
+    except URLError as e:
+        logger.error(f"Telegram API URL error for {method}: {e.reason}")
+        raise
+    except Exception as e:
+        logger.error(f"Telegram API unexpected error for {method}: {e}")
         raise
 
 
-def send_message(chat_id: int, text: str, parse_mode: str = "Markdown") -> dict:
-    """Send a text message to a chat."""
-    return telegram_api_call(
-        "sendMessage",
-        {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": parse_mode,
-        },
-    )
+def send_message(chat_id: int, text: str, parse_mode: str = None) -> dict:
+    """
+    Send a text message to a chat.
+
+    Args:
+        chat_id: Telegram chat ID
+        text: Message text
+        parse_mode: Optional parse mode ("Markdown", "HTML", or None for plain text)
+    """
+    data = {
+        "chat_id": chat_id,
+        "text": text,
+    }
+    if parse_mode:
+        data["parse_mode"] = parse_mode
+
+    return telegram_api_call("sendMessage", data)
 
 
 def send_video(chat_id: int, video_url: str, caption: str) -> dict:
@@ -135,7 +156,6 @@ def send_video(chat_id: int, video_url: str, caption: str) -> dict:
             "chat_id": chat_id,
             "video": video_url,
             "caption": caption,
-            "parse_mode": "Markdown",
             "supports_streaming": True,
         },
     )
@@ -148,8 +168,8 @@ def delete_message(chat_id: int, message_id: int) -> None:
             "deleteMessage",
             {"chat_id": chat_id, "message_id": message_id},
         )
-    except Exception:
-        pass  # Ignore delete errors
+    except Exception as e:
+        logger.debug(f"Could not delete message {message_id}: {e}")
 
 
 def fetch_url(url: str) -> str:
@@ -291,12 +311,12 @@ def handle_today_command(chat_id: int) -> None:
         if loading_msg_id:
             delete_message(chat_id, loading_msg_id)
 
-        # Format caption
+        # Format caption (plain text)
         caption = (
-            f"📚 *Today's Daf Yomi History*\n\n"
-            f"*{video['masechta']} {video['daf']}*\n"
+            f"📚 Today's Daf Yomi History\n\n"
+            f"{video['masechta']} {video['daf']}\n"
             f"{video['title']}\n\n"
-            f"[View on AllDaf.org]({video['page_url']})"
+            f"View on AllDaf.org: {video['page_url']}"
         )
 
         # Send video or text
@@ -308,14 +328,14 @@ def handle_today_command(chat_id: int) -> None:
         logger.info(f"Sent video to chat {chat_id}: {video['title']}")
 
     except Exception as e:
-        logger.error(f"Error in /today command: {e}")
+        logger.error(f"Error in /today command: {e}\n{traceback.format_exc()}")
 
         # Delete loading message if it exists
         if loading_msg_id:
             delete_message(chat_id, loading_msg_id)
 
         # Send error message
-        send_message(chat_id, ERROR_MESSAGE, parse_mode=None)
+        send_message(chat_id, ERROR_MESSAGE)
 
 
 def process_update(update: dict) -> None:
@@ -325,20 +345,40 @@ def process_update(update: dict) -> None:
     chat = message.get("chat", {})
     chat_id = chat.get("id")
 
-    if not chat_id or not text:
+    if not chat_id:
+        logger.warning("No chat_id in update")
         return
 
-    logger.info(f"Received command from chat {chat_id}: {text}")
+    if not text:
+        logger.debug(f"No text in message from chat {chat_id}")
+        return
 
-    # Handle commands
+    logger.info(f"Received from chat {chat_id}: {text}")
+
+    # Handle commands (case-insensitive, with or without bot mention)
     command = text.split()[0].lower() if text else ""
 
-    if command in ("/start", "/start@dafhistorybot"):
-        send_message(chat_id, WELCOME_MESSAGE)
-    elif command in ("/help", "/help@dafhistorybot"):
-        send_message(chat_id, HELP_MESSAGE)
-    elif command in ("/today", "/today@dafhistorybot"):
-        handle_today_command(chat_id)
+    # Strip @botname suffix if present
+    if "@" in command:
+        command = command.split("@")[0]
+
+    try:
+        if command == "/start":
+            send_message(chat_id, WELCOME_MESSAGE)
+            logger.info(f"Sent welcome to chat {chat_id}")
+        elif command == "/help":
+            send_message(chat_id, HELP_MESSAGE)
+            logger.info(f"Sent help to chat {chat_id}")
+        elif command == "/today":
+            handle_today_command(chat_id)
+        else:
+            logger.debug(f"Unknown command from chat {chat_id}: {command}")
+    except Exception as e:
+        logger.error(f"Error handling command {command}: {e}\n{traceback.format_exc()}")
+        try:
+            send_message(chat_id, "Sorry, an error occurred. Please try again.")
+        except Exception:
+            pass
 
 
 class handler(BaseHTTPRequestHandler):
@@ -355,11 +395,15 @@ class handler(BaseHTTPRequestHandler):
             body = self.rfile.read(content_length)
             update = json.loads(body.decode("utf-8"))
 
-            logger.info(f"Received webhook update: {update.get('update_id')}")
+            update_id = update.get("update_id", "unknown")
+            logger.info(f"Webhook received update {update_id}")
+
             process_update(update)
 
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in webhook: {e}")
         except Exception as e:
-            logger.error(f"Webhook error: {e}")
+            logger.error(f"Webhook error: {e}\n{traceback.format_exc()}")
 
         # Always return 200 to Telegram (prevents retries)
         self.send_response(200)
@@ -372,9 +416,14 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
+
+        # Check if bot token is configured
+        token_set = bool(os.environ.get("TELEGRAM_BOT_TOKEN"))
+
         response = {
             "status": "ok",
             "bot": "Daf Yomi History Bot",
-            "version": "2.0.0",
+            "version": "2.1.0",
+            "token_configured": token_set,
         }
         self.wfile.write(json.dumps(response).encode("utf-8"))

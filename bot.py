@@ -67,28 +67,28 @@ MASECHTA_NAME_MAP: dict[str, str] = {
     "Niddah": "Nidah",
 }
 
-# Bot messages
+# Bot messages (plain text - no Markdown to avoid parsing issues)
 WELCOME_MESSAGE = (
-    "📚 *Welcome to Daf Yomi History Bot!*\n\n"
+    "📚 Welcome to Daf Yomi History Bot!\n\n"
     "I send you daily Jewish History videos from Dr. Henry Abramson's series "
     "on AllDaf.org, matching the Daf Yomi schedule.\n\n"
-    "*Commands:*\n"
-    "/today — Get today's video now\n"
-    "/help — Show this message\n\n"
+    "Commands:\n"
+    "/today - Get today's video now\n"
+    "/help - Show this message\n\n"
     "You'll automatically receive the daily video every morning at "
     "6:00 AM Israel time.\n\n"
-    "_Enjoy your learning!_ 🎓"
+    "Enjoy your learning! 🎓"
 )
 
 HELP_MESSAGE = (
-    "📖 *Daf Yomi History Bot - Help*\n\n"
-    "*Available Commands:*\n\n"
-    "/today — Get today's Daf Yomi history video\n"
-    "/help — Show this help message\n\n"
-    "*About:*\n"
+    "📖 Daf Yomi History Bot - Help\n\n"
+    "Available Commands:\n\n"
+    "/today - Get today's Daf Yomi history video\n"
+    "/help - Show this help message\n\n"
+    "About:\n"
     "This bot sends Jewish History videos from AllDaf.org's series "
     "by Dr. Henry Abramson. Each video corresponds to the daily Daf Yomi page.\n\n"
-    "*Schedule:*\n"
+    "Schedule:\n"
     "Daily videos are sent automatically at 6:00 AM Israel time."
 )
 
@@ -220,13 +220,13 @@ async def get_jewish_history_video(daf: DafInfo) -> VideoInfo:
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /start command."""
-    await update.message.reply_text(WELCOME_MESSAGE, parse_mode="Markdown")
+    await update.message.reply_text(WELCOME_MESSAGE)
     logger.info(f"New user started bot: {update.effective_user.id}")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /help command."""
-    await update.message.reply_text(HELP_MESSAGE, parse_mode="Markdown")
+    await update.message.reply_text(HELP_MESSAGE)
 
 
 async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -248,12 +248,12 @@ async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # Delete loading message
         await loading_msg.delete()
 
-        # Format caption
+        # Format caption (plain text)
         caption = (
-            f"📚 *Today's Daf Yomi History*\n\n"
-            f"*{video.masechta} {video.daf}*\n"
+            f"📚 Today's Daf Yomi History\n\n"
+            f"{video.masechta} {video.daf}\n"
             f"{video.title}\n\n"
-            f"[View on AllDaf.org]({video.page_url})"
+            f"View on AllDaf.org: {video.page_url}"
         )
 
         if video.video_url:
@@ -261,14 +261,12 @@ async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 chat_id=chat_id,
                 video=video.video_url,
                 caption=caption,
-                parse_mode="Markdown",
                 supports_streaming=True,
             )
         else:
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=caption,
-                parse_mode="Markdown",
                 disable_web_page_preview=False,
             )
 
