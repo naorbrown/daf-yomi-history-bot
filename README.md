@@ -16,7 +16,7 @@ A Telegram bot that delivers daily Jewish History videos from [AllDaf.org](https
 2. **Search for** `@DafHistoryBot`
 3. **Tap Start**
 
-That's it! You'll receive a daily video at 1:30 AM Israel time.
+That's it! You'll receive a daily video every morning at 6:00 AM Israel time.
 
 > **Quick link:** [t.me/DafHistoryBot](https://t.me/DafHistoryBot)
 
@@ -40,7 +40,7 @@ This bot sends you a short Jewish History video every day, matching the Daf Yomi
 
 ### When do I get videos?
 
-- **Automatically** every day at 1:30 AM Israel time
+- **Automatically** every morning at 6:00 AM Israel time
 - **On-demand** anytime by sending `/today`
 
 ### Is it free?
@@ -98,7 +98,7 @@ Go to your fork → **Settings** → **Secrets and variables** → **Actions**
 
 Go to **Actions** tab → Enable workflows
 
-✅ Done! Videos will be sent daily at 1:30 AM Israel time.
+✅ Done! Videos will be sent daily at 6:00 AM Israel time.
 
 ### Running the Interactive Bot
 
@@ -127,7 +127,7 @@ Options for hosting:
 ```
 ┌─────────────────┐     ┌─────────────┐     ┌─────────────┐     ┌──────────┐
 │ GitHub Actions  │────▶│ Hebcal API  │────▶│ AllDaf.org  │────▶│ Telegram │
-│ (1:30 AM IST)   │     │ (Get Daf)   │     │ (Get Video) │     │ (Send)   │
+│ (6:00 AM IST)   │     │ (Get Daf)   │     │ (Get Video) │     │ (Send)   │
 └─────────────────┘     └─────────────┘     └─────────────┘     └──────────┘
 ```
 
