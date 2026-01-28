@@ -206,7 +206,7 @@ def handle_today_command(chat_id: int) -> None:
                     "chat_id": chat_id,
                     "message_id": loading_id,
                 })
-            except:
+            except Exception:
                 pass
 
         # Format caption
@@ -222,12 +222,12 @@ def handle_today_command(chat_id: int) -> None:
         else:
             send_message(chat_id, caption)
 
-    except Exception as e:
+    except Exception:
         send_message(
             chat_id,
-            f"Sorry, I couldn't find today's video. Please try again later.\n\n"
-            f"You can also visit AllDaf.org directly:\n"
-            f"https://alldaf.org/series/3940"
+            "Sorry, I couldn't find today's video. Please try again later.\n\n"
+            "You can also visit AllDaf.org directly:\n"
+            "https://alldaf.org/series/3940"
         )
 
 
@@ -266,7 +266,7 @@ class handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b'{"ok": true}')
 
-        except Exception as e:
+        except Exception:
             self.send_response(200)  # Always return 200 to Telegram
             self.send_header("Content-Type", "application/json")
             self.end_headers()

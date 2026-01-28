@@ -275,9 +275,9 @@ async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.error(f"Error in /today command: {e}")
         await loading_msg.edit_text(
-            f"Sorry, I couldn't find today's video. Please try again later.\n\n"
-            f"You can also visit AllDaf.org directly:\n"
-            f"https://alldaf.org/series/3940"
+            "Sorry, I couldn't find today's video. Please try again later.\n\n"
+            "You can also visit AllDaf.org directly:\n"
+            "https://alldaf.org/series/3940"
         )
 
 
