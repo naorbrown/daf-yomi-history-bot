@@ -287,7 +287,8 @@ async def send_to_telegram(video: VideoInfo, bot_token: str, chat_id: str) -> No
     caption = (
         f"📚 *Today's Daf Yomi History*\n\n"
         f"*{video.masechta} {video.daf}*\n"
-        f"{video.title}"
+        f"{video.title}\n\n"
+        f"[View on AllDaf.org]({video.page_url})"
     )
 
     bot = Bot(token=bot_token)
@@ -304,10 +305,9 @@ async def send_to_telegram(video: VideoInfo, bot_token: str, chat_id: str) -> No
             )
         else:
             logger.info("Sending link (no direct video URL available)...")
-            message = f"{caption}\n\n[Watch the video]({video.page_url})"
             await bot.send_message(
                 chat_id=chat_id,
-                text=message,
+                text=caption,
                 parse_mode="Markdown",
                 disable_web_page_preview=False,
             )

@@ -250,7 +250,8 @@ async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         caption = (
             f"📚 *Today's Daf Yomi History*\n\n"
             f"*{video.masechta} {video.daf}*\n"
-            f"{video.title}"
+            f"{video.title}\n\n"
+            f"[View on AllDaf.org]({video.page_url})"
         )
 
         if video.video_url:
@@ -262,10 +263,9 @@ async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 supports_streaming=True,
             )
         else:
-            message = f"{caption}\n\n[Watch the video]({video.page_url})"
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=message,
+                text=caption,
                 parse_mode="Markdown",
                 disable_web_page_preview=False,
             )

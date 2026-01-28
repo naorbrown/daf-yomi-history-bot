@@ -57,10 +57,7 @@ HELP_MESSAGE = """📖 *Daf Yomi History Bot - Help*
 This bot sends Jewish History videos from AllDaf.org's series by Dr. Henry Abramson. Each video corresponds to the daily Daf Yomi page.
 
 *Schedule:*
-Daily videos are sent automatically at 6:00 AM Israel time.
-
-*Questions?*
-Visit: github.com/naorbrown/daf-yomi-history-bot"""
+Daily videos are sent automatically at 6:00 AM Israel time."""
 
 
 def get_bot_token():
@@ -216,14 +213,14 @@ def handle_today_command(chat_id: int) -> None:
         caption = (
             f"📚 *Today's Daf Yomi History*\n\n"
             f"*{video['masechta']} {video['daf']}*\n"
-            f"{video['title']}"
+            f"{video['title']}\n\n"
+            f"[View on AllDaf.org]({video['page_url']})"
         )
 
         if video["video_url"]:
             send_video(chat_id, video["video_url"], caption)
         else:
-            message = f"{caption}\n\n[Watch the video]({video['page_url']})"
-            send_message(chat_id, message)
+            send_message(chat_id, caption)
 
     except Exception as e:
         send_message(
