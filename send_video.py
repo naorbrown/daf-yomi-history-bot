@@ -26,6 +26,8 @@ from bs4 import BeautifulSoup
 from telegram import Bot
 from telegram.error import TelegramError
 
+from unified import is_unified_channel_enabled, publish_video_to_unified_channel
+
 # Configure logging
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -357,6 +359,37 @@ async def send_to_telegram(video: VideoInfo, bot_token: str, chat_id: str) -> No
         raise
 
 
+async def send_to_unified_channel(video: VideoInfo) -> None:
+    """
+    Send the video to the unified Torah Yomi channel.
+
+    Args:
+        video: VideoInfo with video details
+    """
+    if not is_unified_channel_enabled():
+        logger.info("Unified channel not configured, skipping")
+        return
+
+    # Simplified caption for unified channel
+    unified_caption = (
+        f"📚 *{video.masechta} {video.daf}*\n"
+        f"_{video.title}_\n\n"
+        f"Jewish History with Dr. Henry Abramson\n\n"
+        f"[View on AllDaf.org]({video.page_url})"
+    )
+
+    try:
+        if video.video_url:
+            await publish_video_to_unified_channel(video.video_url, unified_caption)
+        else:
+            from unified import publish_text_to_unified_channel
+            await publish_text_to_unified_channel(unified_caption)
+        logger.info("Published to unified channel successfully")
+    except Exception as e:
+        # Don't fail the main job if unified channel fails
+        logger.error(f"Failed to publish to unified channel: {e}")
+
+
 async def main() -> int:
     """
     Main entry point.
@@ -384,6 +417,9 @@ async def main() -> int:
 
         # Send to Telegram
         await send_to_telegram(video, bot_token, chat_id)
+
+        # Also publish to unified Torah Yomi channel
+        await send_to_unified_channel(video)
 
         return 0
 
