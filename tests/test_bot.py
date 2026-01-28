@@ -89,9 +89,9 @@ class TestMessages(unittest.TestCase):
         self.assertIn("/today", HELP_MESSAGE)
         self.assertIn("/help", HELP_MESSAGE)
 
-    def test_help_message_contains_repo(self):
-        """Test help message contains repo link."""
-        self.assertIn("github.com/naorbrown/daf-yomi-history-bot", HELP_MESSAGE)
+    def test_help_message_contains_schedule(self):
+        """Test help message mentions schedule."""
+        self.assertIn("6:00 AM Israel time", HELP_MESSAGE)
 
 
 class TestHebcalAPI(unittest.TestCase):
