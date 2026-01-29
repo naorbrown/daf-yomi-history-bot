@@ -112,7 +112,7 @@ daf-yomi-history-bot/
 ```bash
 # Install dependencies
 pip install -r requirements.txt
-pip install pytest pytest-cov pyyaml
+pip install pytest pytest-cov pytest-asyncio pyyaml
 
 # Run all tests
 pytest tests/ -v
@@ -123,6 +123,24 @@ pytest tests/ -v --cov=src --cov-report=term-missing
 # Run API integration tests
 python test_apis.py
 ```
+
+### Local Bot Testing
+
+To test the bot command polling locally:
+
+```bash
+# Set your bot token
+export TELEGRAM_BOT_TOKEN="your-token-here"
+
+# Run the poll script
+python scripts/poll_commands.py
+```
+
+The script will:
+1. Initialize state on first run (skips old messages)
+2. Fetch new updates from Telegram
+3. Process any pending commands
+4. Log all activity to console
 
 ---
 
@@ -147,6 +165,8 @@ python test_apis.py
 | Wrong daf displayed | Bot uses Israel timezone - verify at [Hebcal](https://www.hebcal.com/sedrot) |
 | Daily video not sending | Check GitHub Actions logs in your fork |
 | Commands slow | Commands poll every 5 min - this is a GitHub Actions limitation |
+| Commands not responding | Check Actions → Poll Bot Commands workflow is running and not failing |
+| Bot responds to old messages | State file may be missing - workflow will auto-initialize on next run |
 
 ---
 
