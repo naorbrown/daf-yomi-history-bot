@@ -33,6 +33,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 # Paths - use GITHUB_WORKSPACE if available, otherwise script-relative
 def get_repo_root() -> Path:
     """Get the repository root directory."""
@@ -119,12 +120,15 @@ ERROR_MESSAGE = """Sorry, I couldn't find today's video. Please try again later.
 You can also visit AllDaf.org directly:
 https://alldaf.org/series/3940"""
 
-RATE_LIMITED_MESSAGE = """You're sending too many requests. Please wait a minute and try again."""
+RATE_LIMITED_MESSAGE = (
+    """You're sending too many requests. Please wait a minute and try again."""
+)
 
 
 @dataclass
 class DafInfo:
     """Information about the current Daf Yomi."""
+
     masechta: str
     daf: int
 
@@ -132,6 +136,7 @@ class DafInfo:
 @dataclass
 class VideoInfo:
     """Information about a Jewish History video."""
+
     title: str
     page_url: str
     video_url: Optional[str]
@@ -501,4 +506,5 @@ async def main() -> int:
 
 if __name__ == "__main__":
     import asyncio
+
     sys.exit(asyncio.run(main()))

@@ -10,7 +10,6 @@ Tests cover:
 - Edge cases
 """
 
-import pytest
 import sys
 import os
 
@@ -186,16 +185,23 @@ class TestCommandResult:
     def test_has_params_true(self):
         """Test has_params property when params exist."""
         result = CommandResult(
-            command="today", params="test param", is_valid=True, raw_text="/today test param"
+            command="today",
+            params="test param",
+            is_valid=True,
+            raw_text="/today test param",
         )
         assert result.has_params is True
 
     def test_has_params_false(self):
         """Test has_params property when no params."""
-        result = CommandResult(command="start", params="", is_valid=True, raw_text="/start")
+        result = CommandResult(
+            command="start", params="", is_valid=True, raw_text="/start"
+        )
         assert result.has_params is False
 
     def test_has_params_whitespace_only(self):
         """Test has_params with whitespace-only params."""
-        result = CommandResult(command="today", params="   ", is_valid=True, raw_text="/today   ")
+        result = CommandResult(
+            command="today", params="   ", is_valid=True, raw_text="/today   "
+        )
         assert result.has_params is False

@@ -53,7 +53,9 @@ def parse_command(text: Optional[str]) -> CommandResult:
         return CommandResult(command=None, params="", is_valid=False, raw_text="")
 
     if not isinstance(text, str):
-        return CommandResult(command=None, params="", is_valid=False, raw_text=str(text))
+        return CommandResult(
+            command=None, params="", is_valid=False, raw_text=str(text)
+        )
 
     # Clean and normalize
     raw_text = text
