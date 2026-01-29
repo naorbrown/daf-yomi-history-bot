@@ -202,7 +202,13 @@ class TelegramAPI:
                 logger.info(f"Received {len(updates)} updates from Telegram")
                 return updates
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error calling getUpdates: {e.response.status_code} - {e.response.text}")
+            if e.response.status_code == 409:
+                logger.error(
+                    "getUpdates returned 409 Conflict - a webhook is blocking polling! "
+                    "Run 'python scripts/fix_bot.py' to diagnose and fix."
+                )
+            else:
+                logger.error(f"HTTP error calling getUpdates: {e.response.status_code} - {e.response.text}")
             raise
         except Exception as e:
             logger.error(f"Error calling getUpdates: {type(e).__name__}: {e}")
@@ -543,25 +549,6 @@ async def process_updates(api: TelegramAPI, state: StateManager) -> int:
     return processed
 
 
-async def initialize_state_if_needed(api: TelegramAPI, state: StateManager) -> None:
-    """
-    Initialize state file on first run.
-
-    On first run (no state file), we set last_update_id to 0 so that
-    process_updates will fetch all pending updates and process them.
-
-    This ensures commands are always processed, even on the very first run.
-    """
-    if state.get_last_update_id() is not None:
-        return
-
-    logger.info("First run detected - initializing state to process all pending messages")
-    # Set to 0 so process_updates will use offset=1 and fetch recent messages
-    # This ensures we don't skip user commands on first run
-    state.set_last_update_id(0)
-    logger.info("Initialized last_update_id to 0")
-
-
 async def main() -> int:
     """Main entry point."""
     logger.info("=" * 50)
@@ -585,8 +572,13 @@ async def main() -> int:
         state = StateManager()
 
         # Delete any existing webhook to ensure polling works
-        # This is idempotent - safe to call even if no webhook was set
-        await api.delete_webhook()
+        # This is critical - if a webhook is set, getUpdates will fail with 409
+        webhook_deleted = await api.delete_webhook()
+        if not webhook_deleted:
+            logger.warning(
+                "Failed to delete webhook - getUpdates may fail. "
+                "Run 'python scripts/fix_bot.py' to diagnose."
+            )
 
         last_id = state.get_last_update_id()
         logger.info(f"Last update ID: {last_id if last_id is not None else 'None (first run)'}")
