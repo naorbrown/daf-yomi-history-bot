@@ -49,6 +49,7 @@ REPO_ROOT = get_repo_root()
 STATE_DIR = REPO_ROOT / ".github" / "state"
 STATE_FILE = STATE_DIR / "last_update_id.json"
 RATE_LIMIT_FILE = STATE_DIR / "rate_limits.json"
+VIDEO_CACHE_FILE = STATE_DIR / "video_cache.json"
 
 # Constants
 ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
@@ -300,6 +301,24 @@ class StateManager:
         """Save rate limit data."""
         RATE_LIMIT_FILE.write_text(json.dumps(data, indent=2))
 
+    def get_cached_video(self, date_str: str) -> Optional[dict[str, Any]]:
+        """Get cached video info if it exists and matches today's date."""
+        if VIDEO_CACHE_FILE.exists():
+            try:
+                data = json.loads(VIDEO_CACHE_FILE.read_text())
+                if data.get("date") == date_str:
+                    logger.info(f"Cache hit for date {date_str}")
+                    return data
+                logger.info(f"Cache miss: cached date {data.get('date')} != {date_str}")
+            except json.JSONDecodeError:
+                logger.warning("Failed to parse video cache file")
+        return None
+
+    def save_video_cache(self, video_info: dict[str, Any]) -> None:
+        """Save video info to cache."""
+        VIDEO_CACHE_FILE.write_text(json.dumps(video_info, indent=2))
+        logger.info(f"Cached video info for date {video_info.get('date')}")
+
 
 class RateLimiter:
     """Per-user rate limiting."""
@@ -461,6 +480,7 @@ async def handle_command(
     command: str,
     rate_limiter: RateLimiter,
     user_id: int,
+    state: StateManager,
 ) -> None:
     """Handle a bot command."""
     # Rate limit check (except for start)
@@ -479,8 +499,37 @@ async def handle_command(
 
     elif command == "today":
         try:
-            daf = await get_todays_daf()
-            video = await get_jewish_history_video(daf)
+            # Get today's date in Israel timezone for cache key
+            israel_now = datetime.now(ISRAEL_TZ)
+            today_str = israel_now.strftime("%Y-%m-%d")
+
+            # Check cache first for near-instant response
+            cached = state.get_cached_video(today_str)
+            if cached:
+                # Use cached data - no external API calls needed
+                video = VideoInfo(
+                    title=cached["title"],
+                    page_url=cached["page_url"],
+                    video_url=cached.get("video_url"),
+                    masechta=cached["masechta"],
+                    daf=cached["daf"],
+                )
+                logger.info(f"Using cached video: {video.title}")
+            else:
+                # Fetch from external APIs and cache result
+                daf = await get_todays_daf()
+                video = await get_jewish_history_video(daf)
+
+                # Cache the result for future requests
+                cache_data = {
+                    "date": today_str,
+                    "title": video.title,
+                    "page_url": video.page_url,
+                    "video_url": video.video_url,
+                    "masechta": video.masechta,
+                    "daf": video.daf,
+                }
+                state.save_video_cache(cache_data)
 
             caption = (
                 f"Today's Daf Yomi History\n\n"
@@ -555,7 +604,7 @@ async def process_updates(api: TelegramAPI, state: StateManager) -> int:
         if command:
             logger.info(f"Processing command /{command} from user {user_id}")
             try:
-                await handle_command(api, chat_id, command, rate_limiter, user_id)
+                await handle_command(api, chat_id, command, rate_limiter, user_id, state)
                 processed += 1
             except Exception as e:
                 logger.error(f"Failed to handle command /{command} for user {user_id}: {e}")

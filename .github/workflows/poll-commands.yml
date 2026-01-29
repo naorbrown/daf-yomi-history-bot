@@ -33,6 +33,6 @@ jobs:
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add .github/state/
+          git add .github/state/last_update_id.json .github/state/rate_limits.json .github/state/video_cache.json || true
           git diff --staged --quiet || git commit -m "chore: update bot state [skip ci]"
           git push
