@@ -1,0 +1,57 @@
+name: Poll Bot Commands
+
+on:
+  schedule:
+    # Run every 5 minutes to check for new commands
+    - cron: '*/5 * * * *'
+
+  # Allow manual trigger for testing
+  workflow_dispatch:
+
+# Need write permissions to commit state changes
+permissions:
+  contents: write
+
+# Only one poll job at a time
+concurrency:
+  group: poll-commands
+  cancel-in-progress: true
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --no-cache-dir httpx beautifulsoup4
+
+      - name: Poll for commands
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          python scripts/poll_commands.py
+
+      - name: Commit state changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Only commit if there are changes in .github/state/
+          if git diff --quiet .github/state/; then
+            echo "No state changes to commit"
+          else
+            git add .github/state/
+            git commit -m "Update bot state [skip ci]"
+            git push
+          fi

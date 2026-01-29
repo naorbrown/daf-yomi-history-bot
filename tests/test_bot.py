@@ -5,6 +5,7 @@ Tests cover:
 - Masechta name conversion
 - Workflow validation
 - Required files exist
+- Python syntax validation
 """
 
 import os
@@ -136,6 +137,14 @@ class TestWorkflowValidation(unittest.TestCase):
         )
         self.assertTrue(os.path.exists(workflow_path))
 
+    def test_poll_commands_workflow_exists(self):
+        """Test poll-commands workflow file exists."""
+        workflow_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            ".github", "workflows", "poll-commands.yml"
+        )
+        self.assertTrue(os.path.exists(workflow_path))
+
     def test_workflow_files_are_valid_yaml(self):
         """Test workflow files are valid YAML."""
         try:
@@ -160,11 +169,11 @@ class TestWorkflowValidation(unittest.TestCase):
 class TestRequiredFilesExist(unittest.TestCase):
     """Test that all required files exist."""
 
-    def test_bot_py_exists(self):
-        """Test bot.py exists."""
+    def test_poll_commands_py_exists(self):
+        """Test scripts/poll_commands.py exists."""
         filepath = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            "bot.py"
+            "scripts", "poll_commands.py"
         )
         self.assertTrue(os.path.exists(filepath))
 
@@ -173,22 +182,6 @@ class TestRequiredFilesExist(unittest.TestCase):
         filepath = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
             "send_video.py"
-        )
-        self.assertTrue(os.path.exists(filepath))
-
-    def test_procfile_exists(self):
-        """Test Procfile exists."""
-        filepath = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "Procfile"
-        )
-        self.assertTrue(os.path.exists(filepath))
-
-    def test_railway_toml_exists(self):
-        """Test railway.toml exists."""
-        filepath = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "railway.toml"
         )
         self.assertTrue(os.path.exists(filepath))
 
@@ -217,15 +210,23 @@ class TestRequiredFilesExist(unittest.TestCase):
             with self.subTest(file=filename):
                 self.assertTrue(os.path.exists(filepath))
 
+    def test_state_directory_exists(self):
+        """Test .github/state directory exists."""
+        dirpath = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            ".github", "state"
+        )
+        self.assertTrue(os.path.isdir(dirpath))
+
 
 class TestPythonSyntax(unittest.TestCase):
     """Test that Python files have valid syntax."""
 
-    def test_bot_py_syntax(self):
-        """Test bot.py has valid syntax."""
+    def test_poll_commands_py_syntax(self):
+        """Test scripts/poll_commands.py has valid syntax."""
         filepath = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            "bot.py"
+            "scripts", "poll_commands.py"
         )
         with open(filepath) as f:
             source = f.read()

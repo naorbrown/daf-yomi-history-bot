@@ -1,172 +1,96 @@
-name: CI/CD Pipeline
+name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
-
-      - name: Run unit tests
-        run: |
-          pytest tests/ -v --tb=short --cov=src --cov-report=term-missing
-
-      - name: Run API integration tests
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          python test_apis.py
-
   lint:
-    name: Code Quality
+    name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install linters
         run: pip install ruff
 
-      - name: Run Ruff linter
-        run: ruff check . --output-format=github || true
+      - name: Check code style
+        run: ruff check .
 
       - name: Check formatting
-        run: ruff format --check . || true
+        run: ruff format --check .
 
-  security:
-    name: Security Scan
+  test:
+    name: Test
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
 
-      - name: Install safety
-        run: pip install safety
-
-      - name: Check dependencies for vulnerabilities
+      - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          safety check || true
+          pip install pytest pytest-cov pyyaml
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short --cov=src --cov-report=term-missing
 
   validate:
-    name: Validate Configuration
+    name: Validate
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install PyYAML
-        run: pip install pyyaml
+      - name: Validate Python syntax
+        run: |
+          python -m py_compile send_video.py
+          python -m py_compile scripts/poll_commands.py
+          for f in src/*.py; do
+            python -m py_compile "$f"
+          done
+          echo "All Python files have valid syntax"
 
-      - name: Validate workflow files
+      - name: Validate workflow YAML
         run: |
           pip install pyyaml
           for f in .github/workflows/*.yml; do
             python -c "import yaml; yaml.safe_load(open('$f'))"
-            echo "✅ $f is valid YAML"
           done
+          echo "All workflow files are valid YAML"
 
-      - name: Validate Railway config
-        run: |
-          if [ -f railway.toml ]; then
-            pip install toml
-            python -c "import toml; toml.load('railway.toml')"
-            echo "✅ railway.toml is valid"
-          fi
-
-      - name: Check required files exist
+      - name: Check required files
         run: |
           files=(
-            "bot.py"
             "send_video.py"
-            "README.md"
-            "SECURITY.md"
-            "Procfile"
-            "railway.toml"
+            "scripts/poll_commands.py"
             "requirements.txt"
-            "src/__init__.py"
-            "src/command_parser.py"
-            "src/rate_limiter.py"
-            "src/message_builder.py"
-            "test_apis.py"
+            ".github/workflows/daily_video.yml"
+            ".github/workflows/poll-commands.yml"
           )
           for f in "${files[@]}"; do
-            if [ -f "$f" ]; then
-              echo "✅ $f exists"
-            else
-              echo "❌ $f missing"
-              exit 1
-            fi
+            test -f "$f" || { echo "Missing: $f"; exit 1; }
           done
-
-      - name: Validate Python syntax
-        run: |
-          python -m py_compile bot.py
-          python -m py_compile send_video.py
-          python -m py_compile test_apis.py
-          python -m py_compile src/command_parser.py
-          python -m py_compile src/rate_limiter.py
-          python -m py_compile src/message_builder.py
-          echo "✅ All Python files have valid syntax"
-
-  notify-success:
-    name: Pipeline Complete
-    needs: [test, lint, security, validate]
-    runs-on: ubuntu-latest
-    if: success()
-
-    steps:
-      - name: Summary
-        run: |
-          echo "## ✅ All checks passed!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- Unit tests: ✅" >> $GITHUB_STEP_SUMMARY
-          echo "- Linting: ✅" >> $GITHUB_STEP_SUMMARY
-          echo "- Security: ✅" >> $GITHUB_STEP_SUMMARY
-          echo "- Validation: ✅" >> $GITHUB_STEP_SUMMARY
+          echo "All required files exist"

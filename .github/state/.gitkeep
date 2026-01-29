@@ -1,0 +1,2 @@
+# This directory stores bot state (last_update_id, rate_limits)
+# Files here are updated by the poll-commands workflow
