@@ -145,62 +145,73 @@ class VideoInfo:
 
 
 class TelegramAPI:
-    """Simple Telegram Bot API client."""
+    """Simple Telegram Bot API client with connection reuse for performance."""
 
     def __init__(self, token: str):
         self.token = token
         self.base_url = f"{TELEGRAM_API_BASE}{token}"
+        self._client: Optional[httpx.AsyncClient] = None
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Get or create a reusable HTTP client."""
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                timeout=REQUEST_TIMEOUT,
+                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
+            )
+        return self._client
+
+    async def close(self) -> None:
+        """Close the HTTP client."""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
 
     async def delete_webhook(self) -> bool:
-        """Delete any existing webhook to enable polling.
-
-        This must be called before getUpdates will work if a webhook was previously set.
-        It's safe to call even if no webhook is set.
-        """
+        """Delete any existing webhook to enable polling."""
         logger.info("Deleting webhook to ensure polling works...")
         try:
-            async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-                response = await client.post(
-                    f"{self.base_url}/deleteWebhook",
-                    json={"drop_pending_updates": False},
-                )
-                response.raise_for_status()
-                data = response.json()
+            client = await self._get_client()
+            response = await client.post(
+                f"{self.base_url}/deleteWebhook",
+                json={"drop_pending_updates": False},
+            )
+            response.raise_for_status()
+            data = response.json()
 
-                if data.get("ok"):
-                    logger.info("Webhook deleted successfully (or no webhook was set)")
-                    return True
-                else:
-                    logger.warning(f"deleteWebhook response: {data}")
-                    return False
+            if data.get("ok"):
+                logger.info("Webhook deleted successfully (or no webhook was set)")
+                return True
+            else:
+                logger.warning(f"deleteWebhook response: {data}")
+                return False
         except Exception as e:
             logger.error(f"Error deleting webhook: {type(e).__name__}: {e}")
-            # Don't fail completely - try polling anyway
             return False
 
     async def get_updates(self, offset: Optional[int] = None) -> list[dict[str, Any]]:
-        """Fetch new updates from Telegram using JSON body (matches node-telegram-bot-api)."""
+        """Fetch new updates from Telegram."""
         params: dict[str, Any] = {"timeout": 0, "limit": 100}
         if offset is not None:
             params["offset"] = offset
 
         logger.info(f"Calling getUpdates with offset={offset}")
         try:
-            async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-                response = await client.post(
-                    f"{self.base_url}/getUpdates",
-                    json=params,
-                )
-                response.raise_for_status()
-                data = response.json()
+            client = await self._get_client()
+            response = await client.post(
+                f"{self.base_url}/getUpdates",
+                json=params,
+            )
+            response.raise_for_status()
+            data = response.json()
 
-                if not data.get("ok"):
-                    logger.error(f"getUpdates failed: {data}")
-                    raise RuntimeError(f"Telegram API error: {data}")
+            if not data.get("ok"):
+                logger.error(f"getUpdates failed: {data}")
+                raise RuntimeError(f"Telegram API error: {data}")
 
-                updates = data.get("result", [])
-                logger.info(f"Received {len(updates)} updates from Telegram")
-                return updates
+            updates = data.get("result", [])
+            logger.info(f"Received {len(updates)} updates from Telegram")
+            return updates
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 409:
                 logger.error(
@@ -217,41 +228,43 @@ class TelegramAPI:
     async def send_message(self, chat_id: int, text: str) -> dict[str, Any]:
         """Send a text message."""
         logger.info(f"Sending message to chat_id={chat_id}")
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-            response = await client.post(
-                f"{self.base_url}/sendMessage",
-                json={"chat_id": chat_id, "text": text},
-            )
-            response.raise_for_status()
-            data = response.json()
-            if not data.get("ok"):
-                logger.error(f"sendMessage failed: {data}")
-                raise RuntimeError(f"Telegram API error: {data}")
-            logger.info(f"Message sent successfully to chat_id={chat_id}")
-            return data
+        client = await self._get_client()
+        response = await client.post(
+            f"{self.base_url}/sendMessage",
+            json={"chat_id": chat_id, "text": text},
+        )
+        response.raise_for_status()
+        data = response.json()
+        if not data.get("ok"):
+            logger.error(f"sendMessage failed: {data}")
+            raise RuntimeError(f"Telegram API error: {data}")
+        logger.info(f"Message sent successfully to chat_id={chat_id}")
+        return data
 
     async def send_video(
         self, chat_id: int, video_url: str, caption: str
     ) -> dict[str, Any]:
         """Send a video message."""
         logger.info(f"Sending video to chat_id={chat_id}")
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{self.base_url}/sendVideo",
-                json={
-                    "chat_id": chat_id,
-                    "video": video_url,
-                    "caption": caption,
-                    "supports_streaming": True,
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
-            if not data.get("ok"):
-                logger.error(f"sendVideo failed: {data}")
-                raise RuntimeError(f"Telegram API error: {data}")
-            logger.info(f"Video sent successfully to chat_id={chat_id}")
-            return data
+        # Use longer timeout for video uploads
+        client = await self._get_client()
+        response = await client.post(
+            f"{self.base_url}/sendVideo",
+            json={
+                "chat_id": chat_id,
+                "video": video_url,
+                "caption": caption,
+                "supports_streaming": True,
+            },
+            timeout=60.0,
+        )
+        response.raise_for_status()
+        data = response.json()
+        if not data.get("ok"):
+            logger.error(f"sendVideo failed: {data}")
+            raise RuntimeError(f"Telegram API error: {data}")
+        logger.info(f"Video sent successfully to chat_id={chat_id}")
+        return data
 
 
 class StateManager:
@@ -575,8 +588,8 @@ async def main() -> int:
     # Log token presence (not the actual token)
     logger.info(f"TELEGRAM_BOT_TOKEN is set (length: {len(token)})")
 
+    api = TelegramAPI(token)
     try:
-        api = TelegramAPI(token)
         state = StateManager()
 
         # Delete any existing webhook to ensure getUpdates works
@@ -597,6 +610,9 @@ async def main() -> int:
     except Exception as e:
         logger.exception(f"Error processing updates: {e}")
         return 1
+
+    finally:
+        await api.close()
 
 
 if __name__ == "__main__":
