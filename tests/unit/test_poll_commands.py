@@ -23,7 +23,6 @@ from poll_commands import (
     RateLimiter,
     parse_command,
     convert_masechta_name,
-    initialize_state_if_needed,
     WELCOME_MESSAGE,
     HELP_MESSAGE,
     ERROR_MESSAGE,
@@ -405,65 +404,6 @@ class TestTelegramAPI:
 
             with pytest.raises(RuntimeError, match="Telegram API error"):
                 await api.send_video(123, "https://example.com/video.mp4", "Caption")
-
-
-class TestInitializeState:
-    """Tests for initialize_state_if_needed function."""
-
-    @pytest.mark.asyncio
-    async def test_skips_if_state_exists(self):
-        """Test initialization is skipped if state already exists."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            state_file = Path(tmpdir) / "state.json"
-            state_file.write_text(json.dumps({"last_update_id": 100}))
-
-            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
-                with patch("poll_commands.STATE_FILE", state_file):
-                    state = StateManager()
-                    api = MagicMock()
-
-                    await initialize_state_if_needed(api, state)
-
-                    # API should not be called
-                    api.get_updates.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_initializes_to_zero(self):
-        """Test state is initialized to 0 on first run to allow processing all messages."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            state_file = Path(tmpdir) / "state.json"
-
-            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
-                with patch("poll_commands.STATE_FILE", state_file):
-                    state = StateManager()
-
-                    # API mock not needed - no API call is made
-                    api = MagicMock()
-
-                    await initialize_state_if_needed(api, state)
-
-                    # State should be set to 0 (allows processing all recent messages)
-                    assert state.get_last_update_id() == 0
-                    # No API call should be made
-                    api.get_updates.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_initializes_without_updates(self):
-        """Test state is initialized to 0 when no state exists."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            state_file = Path(tmpdir) / "state.json"
-
-            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
-                with patch("poll_commands.STATE_FILE", state_file):
-                    state = StateManager()
-
-                    # API mock not needed
-                    api = MagicMock()
-
-                    await initialize_state_if_needed(api, state)
-
-                    # State should be set to 0
-                    assert state.get_last_update_id() == 0
 
 
 class TestProcessUpdates:
