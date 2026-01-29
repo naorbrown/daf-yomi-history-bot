@@ -258,7 +258,7 @@ class TestTelegramAPI:
 
         with patch("httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
-            mock_instance.get.return_value = mock_response
+            mock_instance.post.return_value = mock_response
             mock_instance.__aenter__.return_value = mock_instance
             mock_instance.__aexit__.return_value = None
             mock_client.return_value = mock_instance
@@ -267,7 +267,7 @@ class TestTelegramAPI:
 
             assert len(updates) == 2
             assert updates[0]["update_id"] == 123
-            mock_instance.get.assert_called_once()
+            mock_instance.post.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_updates_with_none_offset(self):
@@ -280,7 +280,7 @@ class TestTelegramAPI:
 
         with patch("httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
-            mock_instance.get.return_value = mock_response
+            mock_instance.post.return_value = mock_response
             mock_instance.__aenter__.return_value = mock_instance
             mock_instance.__aexit__.return_value = None
             mock_client.return_value = mock_instance
@@ -303,7 +303,7 @@ class TestTelegramAPI:
 
         with patch("httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
-            mock_instance.get.return_value = mock_response
+            mock_instance.post.return_value = mock_response
             mock_instance.__aenter__.return_value = mock_instance
             mock_instance.__aexit__.return_value = None
             mock_client.return_value = mock_instance
@@ -596,9 +596,9 @@ class TestEndToEndFlow:
                                 mock_instance.__aexit__.return_value = None
                                 mock_client.return_value = mock_instance
 
-                                # On first run, initialize sets state to 0, then
-                                # process_updates fetches with offset=1 and gets all messages
-                                mock_instance.get.return_value = MagicMock(
+                                # All API calls now use POST
+                                # First call is getUpdates, rest are sendMessage
+                                get_updates_response = MagicMock(
                                     json=lambda: {
                                         "ok": True,
                                         "result": [
@@ -622,12 +622,17 @@ class TestEndToEndFlow:
                                     },
                                     raise_for_status=MagicMock(),
                                 )
-
-                                # Mock send_message
-                                mock_instance.post.return_value = MagicMock(
+                                send_message_response = MagicMock(
                                     json=lambda: {"ok": True, "result": {}},
                                     raise_for_status=MagicMock(),
                                 )
+
+                                # First POST is getUpdates, then 2 sendMessage calls
+                                mock_instance.post.side_effect = [
+                                    get_updates_response,
+                                    send_message_response,
+                                    send_message_response,
+                                ]
 
                                 result = await main()
 
@@ -639,12 +644,8 @@ class TestEndToEndFlow:
                                 data = json.loads(state_file.read_text())
                                 assert data["last_update_id"] == 101
 
-                                # Should have made 1 GET call (process_updates only)
-                                # initialize_state_if_needed no longer calls API
-                                assert mock_instance.get.call_count == 1
-
-                                # Should have sent 2 messages (/start and /help)
-                                assert mock_instance.post.call_count == 2
+                                # Should have made 3 POST calls (1 getUpdates + 2 sendMessage)
+                                assert mock_instance.post.call_count == 3
 
     @pytest.mark.asyncio
     async def test_full_flow_subsequent_run(self):
@@ -668,8 +669,8 @@ class TestEndToEndFlow:
                                 mock_instance.__aexit__.return_value = None
                                 mock_client.return_value = mock_instance
 
-                                # Only process_updates call (offset=101)
-                                mock_instance.get.return_value = MagicMock(
+                                # All API calls now use POST
+                                get_updates_response = MagicMock(
                                     json=lambda: {
                                         "ok": True,
                                         "result": [
@@ -685,11 +686,16 @@ class TestEndToEndFlow:
                                     },
                                     raise_for_status=MagicMock(),
                                 )
-
-                                mock_instance.post.return_value = MagicMock(
+                                send_message_response = MagicMock(
                                     json=lambda: {"ok": True, "result": {}},
                                     raise_for_status=MagicMock(),
                                 )
+
+                                # First POST is getUpdates, then sendMessage
+                                mock_instance.post.side_effect = [
+                                    get_updates_response,
+                                    send_message_response,
+                                ]
 
                                 result = await main()
 
@@ -699,5 +705,5 @@ class TestEndToEndFlow:
                                 data = json.loads(state_file.read_text())
                                 assert data["last_update_id"] == 101
 
-                                # Should only call get once (no init needed)
-                                assert mock_instance.get.call_count == 1
+                                # Should make 2 POST calls (1 getUpdates + 1 sendMessage)
+                                assert mock_instance.post.call_count == 2

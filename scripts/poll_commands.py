@@ -152,24 +152,34 @@ class TelegramAPI:
         self.base_url = f"{TELEGRAM_API_BASE}{token}"
 
     async def get_updates(self, offset: Optional[int] = None) -> list[dict[str, Any]]:
-        """Fetch new updates from Telegram."""
-        params: dict[str, Any] = {"timeout": 0, "limit": 100}
+        """Fetch new updates from Telegram using POST (matches node-telegram-bot-api)."""
+        form_data: dict[str, Any] = {"timeout": 0, "limit": 100}
         if offset is not None:
-            params["offset"] = offset
+            form_data["offset"] = offset
 
         logger.info(f"Calling getUpdates with offset={offset}")
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-            response = await client.get(f"{self.base_url}/getUpdates", params=params)
-            response.raise_for_status()
-            data = response.json()
+        try:
+            async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+                response = await client.post(
+                    f"{self.base_url}/getUpdates",
+                    data=form_data,
+                )
+                response.raise_for_status()
+                data = response.json()
 
-            if not data.get("ok"):
-                logger.error(f"getUpdates failed: {data}")
-                raise RuntimeError(f"Telegram API error: {data}")
+                if not data.get("ok"):
+                    logger.error(f"getUpdates failed: {data}")
+                    raise RuntimeError(f"Telegram API error: {data}")
 
-            updates = data.get("result", [])
-            logger.info(f"Received {len(updates)} updates from Telegram")
-            return updates
+                updates = data.get("result", [])
+                logger.info(f"Received {len(updates)} updates from Telegram")
+                return updates
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error calling getUpdates: {e.response.status_code} - {e.response.text}")
+            raise
+        except Exception as e:
+            logger.error(f"Error calling getUpdates: {type(e).__name__}: {e}")
+            raise
 
     async def send_message(self, chat_id: int, text: str) -> dict[str, Any]:
         """Send a text message."""
