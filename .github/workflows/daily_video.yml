@@ -56,5 +56,9 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           # Skip time check for manual triggers, enforce for scheduled runs
           SKIP_TIME_CHECK: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_time_check || 'false' }}
+          # Unified Torah Yomi Channel
+          TORAH_YOMI_CHANNEL_ID: ${{ secrets.TORAH_YOMI_CHANNEL_ID }}
+          TORAH_YOMI_CHANNEL_BOT_TOKEN: ${{ secrets.TORAH_YOMI_CHANNEL_BOT_TOKEN }}
+          TORAH_YOMI_PUBLISH_ENABLED: ${{ secrets.TORAH_YOMI_PUBLISH_ENABLED }}
         run: |
           python send_video.py
