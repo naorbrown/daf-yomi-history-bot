@@ -579,6 +579,10 @@ async def main() -> int:
         api = TelegramAPI(token)
         state = StateManager()
 
+        # Delete any existing webhook to ensure getUpdates works
+        # This is needed if a webhook was ever set on this bot
+        await api.delete_webhook()
+
         last_id = state.get_last_update_id()
         logger.info(f"Last update ID: {last_id if last_id is not None else 'None (first run)'}")
 
