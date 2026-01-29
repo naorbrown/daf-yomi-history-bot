@@ -593,3 +593,135 @@ class TestProcessUpdates:
                         assert state.get_last_update_id() == 102
                         # Only one command successfully processed
                         assert processed == 1
+
+
+class TestEndToEndFlow:
+    """End-to-end tests simulating the full bot flow."""
+
+    @pytest.mark.asyncio
+    async def test_full_flow_first_run_with_pending_messages(self):
+        """Test complete flow on first run with pending messages."""
+        from poll_commands import main, STATE_DIR, STATE_FILE
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "state.json"
+            rate_file = Path(tmpdir) / "rate_limits.json"
+
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.STATE_FILE", state_file):
+                    with patch("poll_commands.RATE_LIMIT_FILE", rate_file):
+                        with patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test_token"}):
+                            # Mock httpx.AsyncClient
+                            with patch("httpx.AsyncClient") as mock_client:
+                                mock_instance = AsyncMock()
+                                mock_instance.__aenter__.return_value = mock_instance
+                                mock_instance.__aexit__.return_value = None
+                                mock_client.return_value = mock_instance
+
+                                # First call (initialize): return old messages
+                                # Second call (process): return new message
+                                mock_instance.get.side_effect = [
+                                    # initialize_state_if_needed call
+                                    MagicMock(
+                                        json=lambda: {
+                                            "ok": True,
+                                            "result": [
+                                                {"update_id": 100},
+                                                {"update_id": 101},
+                                            ],
+                                        },
+                                        raise_for_status=MagicMock(),
+                                    ),
+                                    # process_updates call (with offset=102)
+                                    MagicMock(
+                                        json=lambda: {
+                                            "ok": True,
+                                            "result": [
+                                                {
+                                                    "update_id": 102,
+                                                    "message": {
+                                                        "text": "/start",
+                                                        "chat": {"id": 123},
+                                                        "from": {"id": 456},
+                                                    },
+                                                }
+                                            ],
+                                        },
+                                        raise_for_status=MagicMock(),
+                                    ),
+                                ]
+
+                                # Mock send_message
+                                mock_instance.post.return_value = MagicMock(
+                                    json=lambda: {"ok": True, "result": {}},
+                                    raise_for_status=MagicMock(),
+                                )
+
+                                result = await main()
+
+                                # Should succeed
+                                assert result == 0
+
+                                # State should be updated to 102
+                                assert state_file.exists()
+                                data = json.loads(state_file.read_text())
+                                assert data["last_update_id"] == 102
+
+                                # Should have made 2 GET calls (init + process)
+                                assert mock_instance.get.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_full_flow_subsequent_run(self):
+        """Test complete flow on subsequent run with existing state."""
+        from poll_commands import main
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "state.json"
+            rate_file = Path(tmpdir) / "rate_limits.json"
+
+            # Pre-existing state with last_update_id = 100
+            state_file.write_text(json.dumps({"last_update_id": 100}))
+
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.STATE_FILE", state_file):
+                    with patch("poll_commands.RATE_LIMIT_FILE", rate_file):
+                        with patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test_token"}):
+                            with patch("httpx.AsyncClient") as mock_client:
+                                mock_instance = AsyncMock()
+                                mock_instance.__aenter__.return_value = mock_instance
+                                mock_instance.__aexit__.return_value = None
+                                mock_client.return_value = mock_instance
+
+                                # Only process_updates call (offset=101)
+                                mock_instance.get.return_value = MagicMock(
+                                    json=lambda: {
+                                        "ok": True,
+                                        "result": [
+                                            {
+                                                "update_id": 101,
+                                                "message": {
+                                                    "text": "/help",
+                                                    "chat": {"id": 789},
+                                                    "from": {"id": 111},
+                                                },
+                                            }
+                                        ],
+                                    },
+                                    raise_for_status=MagicMock(),
+                                )
+
+                                mock_instance.post.return_value = MagicMock(
+                                    json=lambda: {"ok": True, "result": {}},
+                                    raise_for_status=MagicMock(),
+                                )
+
+                                result = await main()
+
+                                assert result == 0
+
+                                # State should be updated to 101
+                                data = json.loads(state_file.read_text())
+                                assert data["last_update_id"] == 101
+
+                                # Should only call get once (no init needed)
+                                assert mock_instance.get.call_count == 1
