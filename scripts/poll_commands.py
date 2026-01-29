@@ -153,34 +153,45 @@ class TelegramAPI:
 
     async def get_updates(self, offset: Optional[int] = None) -> list[dict[str, Any]]:
         """Fetch new updates from Telegram."""
-        params = {"timeout": 0, "allowed_updates": ["message"]}
-        if offset:
+        params: dict[str, Any] = {"timeout": 0, "limit": 100}
+        if offset is not None:
             params["offset"] = offset
 
+        logger.info(f"Calling getUpdates with offset={offset}")
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             response = await client.get(f"{self.base_url}/getUpdates", params=params)
             response.raise_for_status()
             data = response.json()
 
             if not data.get("ok"):
+                logger.error(f"getUpdates failed: {data}")
                 raise RuntimeError(f"Telegram API error: {data}")
 
-            return data.get("result", [])
+            updates = data.get("result", [])
+            logger.info(f"Received {len(updates)} updates from Telegram")
+            return updates
 
     async def send_message(self, chat_id: int, text: str) -> dict[str, Any]:
         """Send a text message."""
+        logger.info(f"Sending message to chat_id={chat_id}")
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             response = await client.post(
                 f"{self.base_url}/sendMessage",
                 json={"chat_id": chat_id, "text": text},
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            if not data.get("ok"):
+                logger.error(f"sendMessage failed: {data}")
+                raise RuntimeError(f"Telegram API error: {data}")
+            logger.info(f"Message sent successfully to chat_id={chat_id}")
+            return data
 
     async def send_video(
         self, chat_id: int, video_url: str, caption: str
     ) -> dict[str, Any]:
         """Send a video message."""
+        logger.info(f"Sending video to chat_id={chat_id}")
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{self.base_url}/sendVideo",
@@ -192,7 +203,12 @@ class TelegramAPI:
                 },
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            if not data.get("ok"):
+                logger.error(f"sendVideo failed: {data}")
+                raise RuntimeError(f"Telegram API error: {data}")
+            logger.info(f"Video sent successfully to chat_id={chat_id}")
+            return data
 
 
 class StateManager:
@@ -471,6 +487,34 @@ async def process_updates(api: TelegramAPI, state: StateManager) -> int:
     return processed
 
 
+async def initialize_state_if_needed(api: TelegramAPI, state: StateManager) -> None:
+    """
+    Initialize state file on first run.
+
+    On first run, fetch current updates to get the latest update_id and save it.
+    This prevents processing old stale messages that may have accumulated.
+    """
+    if state.get_last_update_id() is not None:
+        return
+
+    logger.info("First run detected - initializing state with current offset")
+    try:
+        updates = await api.get_updates()
+        if updates:
+            max_id = max(u.get("update_id", 0) for u in updates)
+            state.set_last_update_id(max_id)
+            logger.info(
+                f"Initialized last_update_id to {max_id} (skipping {len(updates)} old messages)"
+            )
+        else:
+            # No pending updates, set to 0 to indicate initialized
+            state.set_last_update_id(0)
+            logger.info("No pending updates, initialized last_update_id to 0")
+    except Exception as e:
+        logger.error(f"Failed to initialize state: {e}")
+        # Don't raise - let the main flow continue and try to process
+
+
 async def main() -> int:
     """Main entry point."""
     logger.info("=" * 50)
@@ -487,6 +531,9 @@ async def main() -> int:
     try:
         api = TelegramAPI(token)
         state = StateManager()
+
+        # Initialize state on first run (prevents processing old stale messages)
+        await initialize_state_if_needed(api, state)
 
         last_id = state.get_last_update_id()
         logger.info(f"Last update ID: {last_id or 'None (first run)'}")

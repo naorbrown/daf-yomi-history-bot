@@ -8,8 +8,9 @@ import json
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock, MagicMock
 
+import pytest
 
 # Add scripts to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
@@ -22,6 +23,7 @@ from poll_commands import (
     RateLimiter,
     parse_command,
     convert_masechta_name,
+    initialize_state_if_needed,
     WELCOME_MESSAGE,
     HELP_MESSAGE,
     ERROR_MESSAGE,
@@ -238,3 +240,251 @@ class TestTelegramAPI:
     def test_api_base_url_format(self):
         api = TelegramAPI("123456:ABC-DEF")
         assert api.base_url == "https://api.telegram.org/bot123456:ABC-DEF"
+
+    @pytest.mark.asyncio
+    async def test_get_updates_success(self):
+        """Test get_updates returns updates on success."""
+        api = TelegramAPI("test_token")
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "ok": True,
+            "result": [
+                {"update_id": 123, "message": {"text": "/start"}},
+                {"update_id": 124, "message": {"text": "/today"}},
+            ],
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.return_value = mock_response
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
+            mock_client.return_value = mock_instance
+
+            updates = await api.get_updates(offset=100)
+
+            assert len(updates) == 2
+            assert updates[0]["update_id"] == 123
+            mock_instance.get.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_updates_with_none_offset(self):
+        """Test get_updates works without offset (first run)."""
+        api = TelegramAPI("test_token")
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"ok": True, "result": []}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.return_value = mock_response
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
+            mock_client.return_value = mock_instance
+
+            updates = await api.get_updates(offset=None)
+
+            assert updates == []
+
+    @pytest.mark.asyncio
+    async def test_get_updates_api_error(self):
+        """Test get_updates raises on API error."""
+        api = TelegramAPI("test_token")
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "ok": False,
+            "description": "Unauthorized",
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.get.return_value = mock_response
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
+            mock_client.return_value = mock_instance
+
+            with pytest.raises(RuntimeError, match="Telegram API error"):
+                await api.get_updates()
+
+    @pytest.mark.asyncio
+    async def test_send_message_success(self):
+        """Test send_message returns data on success."""
+        api = TelegramAPI("test_token")
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "ok": True,
+            "result": {"message_id": 456},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.return_value = mock_response
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
+            mock_client.return_value = mock_instance
+
+            result = await api.send_message(123, "Hello!")
+
+            assert result["ok"] is True
+            assert result["result"]["message_id"] == 456
+            mock_instance.post.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_send_message_api_error(self):
+        """Test send_message raises on API error."""
+        api = TelegramAPI("test_token")
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "ok": False,
+            "description": "Bad Request: chat not found",
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.return_value = mock_response
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
+            mock_client.return_value = mock_instance
+
+            with pytest.raises(RuntimeError, match="Telegram API error"):
+                await api.send_message(123, "Hello!")
+
+    @pytest.mark.asyncio
+    async def test_send_video_success(self):
+        """Test send_video returns data on success."""
+        api = TelegramAPI("test_token")
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "ok": True,
+            "result": {"message_id": 789},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.return_value = mock_response
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
+            mock_client.return_value = mock_instance
+
+            result = await api.send_video(
+                123, "https://example.com/video.mp4", "Caption"
+            )
+
+            assert result["ok"] is True
+            assert result["result"]["message_id"] == 789
+
+    @pytest.mark.asyncio
+    async def test_send_video_api_error(self):
+        """Test send_video raises on API error."""
+        api = TelegramAPI("test_token")
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "ok": False,
+            "description": "Bad Request: wrong file identifier",
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post.return_value = mock_response
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
+            mock_client.return_value = mock_instance
+
+            with pytest.raises(RuntimeError, match="Telegram API error"):
+                await api.send_video(123, "https://example.com/video.mp4", "Caption")
+
+
+class TestInitializeState:
+    """Tests for initialize_state_if_needed function."""
+
+    @pytest.mark.asyncio
+    async def test_skips_if_state_exists(self):
+        """Test initialization is skipped if state already exists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "state.json"
+            state_file.write_text(json.dumps({"last_update_id": 100}))
+
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.STATE_FILE", state_file):
+                    state = StateManager()
+                    api = MagicMock()
+
+                    await initialize_state_if_needed(api, state)
+
+                    # API should not be called
+                    api.get_updates.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_initializes_with_updates(self):
+        """Test state is initialized with max update_id from pending updates."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "state.json"
+
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.STATE_FILE", state_file):
+                    state = StateManager()
+
+                    # Mock API to return some updates
+                    api = AsyncMock()
+                    api.get_updates.return_value = [
+                        {"update_id": 100},
+                        {"update_id": 150},
+                        {"update_id": 125},
+                    ]
+
+                    await initialize_state_if_needed(api, state)
+
+                    # State should be set to max update_id
+                    assert state.get_last_update_id() == 150
+
+    @pytest.mark.asyncio
+    async def test_initializes_without_updates(self):
+        """Test state is initialized to 0 when no pending updates."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "state.json"
+
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.STATE_FILE", state_file):
+                    state = StateManager()
+
+                    # Mock API to return no updates
+                    api = AsyncMock()
+                    api.get_updates.return_value = []
+
+                    await initialize_state_if_needed(api, state)
+
+                    # State should be set to 0
+                    assert state.get_last_update_id() == 0
+
+    @pytest.mark.asyncio
+    async def test_handles_api_error_gracefully(self):
+        """Test initialization handles API errors without crashing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "state.json"
+
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.STATE_FILE", state_file):
+                    state = StateManager()
+
+                    # Mock API to raise an error
+                    api = AsyncMock()
+                    api.get_updates.side_effect = RuntimeError("API Error")
+
+                    # Should not raise
+                    await initialize_state_if_needed(api, state)
+
+                    # State should remain None (not set)
+                    assert state.get_last_update_id() is None
