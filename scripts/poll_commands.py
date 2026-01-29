@@ -452,7 +452,7 @@ async def handle_command(
 async def process_updates(api: TelegramAPI, state: StateManager) -> int:
     """Process pending Telegram updates. Returns count of processed updates."""
     last_update_id = state.get_last_update_id()
-    offset = last_update_id + 1 if last_update_id else None
+    offset = last_update_id + 1 if last_update_id is not None else None
 
     updates = await api.get_updates(offset)
     if not updates:
@@ -477,10 +477,14 @@ async def process_updates(api: TelegramAPI, state: StateManager) -> int:
         command = parse_command(text)
         if command:
             logger.info(f"Processing command /{command} from user {user_id}")
-            await handle_command(api, chat_id, command, rate_limiter, user_id)
-            processed += 1
+            try:
+                await handle_command(api, chat_id, command, rate_limiter, user_id)
+                processed += 1
+            except Exception as e:
+                logger.error(f"Failed to handle command /{command} for user {user_id}: {e}")
+                # Continue processing other updates even if one fails
 
-        # Always update the offset, even for non-command messages
+        # Always update the offset, even for non-command messages or failed commands
         state.set_last_update_id(update_id)
 
     logger.info(f"Processed {processed} command(s) from {len(updates)} update(s)")
