@@ -154,6 +154,75 @@ class TestStateManager:
                     state = StateManager()
                     assert state.get_rate_limits() == {}
 
+    def test_get_cached_video_no_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch(
+                    "poll_commands.VIDEO_CACHE_FILE", Path(tmpdir) / "video_cache.json"
+                ):
+                    state = StateManager()
+                    assert state.get_cached_video("2025-01-29") is None
+
+    def test_get_cached_video_wrong_date(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_file = Path(tmpdir) / "video_cache.json"
+            cache_file.write_text(json.dumps({
+                "date": "2025-01-28",
+                "title": "Test Video",
+                "page_url": "https://example.com",
+                "video_url": "https://example.com/video.mp4",
+                "masechta": "Berachos",
+                "daf": 2,
+            }))
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.VIDEO_CACHE_FILE", cache_file):
+                    state = StateManager()
+                    # Different date - should return None
+                    assert state.get_cached_video("2025-01-29") is None
+
+    def test_get_cached_video_correct_date(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_file = Path(tmpdir) / "video_cache.json"
+            cache_data = {
+                "date": "2025-01-29",
+                "title": "Test Video",
+                "page_url": "https://example.com",
+                "video_url": "https://example.com/video.mp4",
+                "masechta": "Berachos",
+                "daf": 2,
+            }
+            cache_file.write_text(json.dumps(cache_data))
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.VIDEO_CACHE_FILE", cache_file):
+                    state = StateManager()
+                    # Same date - should return cached data
+                    result = state.get_cached_video("2025-01-29")
+                    assert result is not None
+                    assert result["title"] == "Test Video"
+                    assert result["masechta"] == "Berachos"
+
+    def test_save_video_cache(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_file = Path(tmpdir) / "video_cache.json"
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.VIDEO_CACHE_FILE", cache_file):
+                    state = StateManager()
+                    cache_data = {
+                        "date": "2025-01-29",
+                        "title": "Test Video",
+                        "page_url": "https://example.com",
+                        "video_url": "https://example.com/video.mp4",
+                        "masechta": "Berachos",
+                        "daf": 2,
+                    }
+                    state.save_video_cache(cache_data)
+
+                    # Verify file was written
+                    assert cache_file.exists()
+                    saved_data = json.loads(cache_file.read_text())
+                    assert saved_data["date"] == "2025-01-29"
+                    assert saved_data["title"] == "Test Video"
+
 
 class TestRateLimiter:
     """Tests for RateLimiter class."""
