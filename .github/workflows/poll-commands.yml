@@ -15,7 +15,7 @@ permissions:
 # Only one poll job at a time
 concurrency:
   group: poll-commands
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   poll:
@@ -25,6 +25,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # Fetch with token that has write access
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -33,19 +36,25 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: |
-          pip install --no-cache-dir httpx beautifulsoup4
+        run: pip install --no-cache-dir httpx beautifulsoup4
 
       - name: Poll for commands
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        run: |
-          python scripts/poll_commands.py
+        run: python scripts/poll_commands.py
+        continue-on-error: true
 
       - name: Commit state changes
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add .github/state/
-          git diff --staged --quiet || git commit -m "chore: update bot state [skip ci]"
-          git push
+          git add .github/state/ || true
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: update bot state [skip ci]"
+            # Retry push up to 3 times with delay
+            for i in 1 2 3; do
+              git pull --rebase origin main && git push && break
+              echo "Push attempt $i failed, retrying..."
+              sleep 2
+            done
+          fi
