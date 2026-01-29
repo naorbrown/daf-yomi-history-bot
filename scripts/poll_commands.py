@@ -495,28 +495,19 @@ async def initialize_state_if_needed(api: TelegramAPI, state: StateManager) -> N
     """
     Initialize state file on first run.
 
-    On first run, fetch current updates to get the latest update_id and save it.
-    This prevents processing old stale messages that may have accumulated.
+    On first run (no state file), we set last_update_id to 0 so that
+    process_updates will fetch all pending updates and process them.
+
+    This ensures commands are always processed, even on the very first run.
     """
     if state.get_last_update_id() is not None:
         return
 
-    logger.info("First run detected - initializing state with current offset")
-    try:
-        updates = await api.get_updates()
-        if updates:
-            max_id = max(u.get("update_id", 0) for u in updates)
-            state.set_last_update_id(max_id)
-            logger.info(
-                f"Initialized last_update_id to {max_id} (skipping {len(updates)} old messages)"
-            )
-        else:
-            # No pending updates, set to 0 to indicate initialized
-            state.set_last_update_id(0)
-            logger.info("No pending updates, initialized last_update_id to 0")
-    except Exception as e:
-        logger.error(f"Failed to initialize state: {e}")
-        # Don't raise - let the main flow continue and try to process
+    logger.info("First run detected - initializing state to process all pending messages")
+    # Set to 0 so process_updates will use offset=1 and fetch recent messages
+    # This ensures we don't skip user commands on first run
+    state.set_last_update_id(0)
+    logger.info("Initialized last_update_id to 0")
 
 
 async def main() -> int:

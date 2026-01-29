@@ -428,8 +428,8 @@ class TestInitializeState:
                     api.get_updates.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_initializes_with_updates(self):
-        """Test state is initialized with max update_id from pending updates."""
+    async def test_initializes_to_zero(self):
+        """Test state is initialized to 0 on first run to allow processing all messages."""
         with tempfile.TemporaryDirectory() as tmpdir:
             state_file = Path(tmpdir) / "state.json"
 
@@ -437,22 +437,19 @@ class TestInitializeState:
                 with patch("poll_commands.STATE_FILE", state_file):
                     state = StateManager()
 
-                    # Mock API to return some updates
-                    api = AsyncMock()
-                    api.get_updates.return_value = [
-                        {"update_id": 100},
-                        {"update_id": 150},
-                        {"update_id": 125},
-                    ]
+                    # API mock not needed - no API call is made
+                    api = MagicMock()
 
                     await initialize_state_if_needed(api, state)
 
-                    # State should be set to max update_id
-                    assert state.get_last_update_id() == 150
+                    # State should be set to 0 (allows processing all recent messages)
+                    assert state.get_last_update_id() == 0
+                    # No API call should be made
+                    api.get_updates.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_initializes_without_updates(self):
-        """Test state is initialized to 0 when no pending updates."""
+        """Test state is initialized to 0 when no state exists."""
         with tempfile.TemporaryDirectory() as tmpdir:
             state_file = Path(tmpdir) / "state.json"
 
@@ -460,34 +457,13 @@ class TestInitializeState:
                 with patch("poll_commands.STATE_FILE", state_file):
                     state = StateManager()
 
-                    # Mock API to return no updates
-                    api = AsyncMock()
-                    api.get_updates.return_value = []
+                    # API mock not needed
+                    api = MagicMock()
 
                     await initialize_state_if_needed(api, state)
 
                     # State should be set to 0
                     assert state.get_last_update_id() == 0
-
-    @pytest.mark.asyncio
-    async def test_handles_api_error_gracefully(self):
-        """Test initialization handles API errors without crashing."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            state_file = Path(tmpdir) / "state.json"
-
-            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
-                with patch("poll_commands.STATE_FILE", state_file):
-                    state = StateManager()
-
-                    # Mock API to raise an error
-                    api = AsyncMock()
-                    api.get_updates.side_effect = RuntimeError("API Error")
-
-                    # Should not raise
-                    await initialize_state_if_needed(api, state)
-
-                    # State should remain None (not set)
-                    assert state.get_last_update_id() is None
 
 
 class TestProcessUpdates:
@@ -618,38 +594,32 @@ class TestEndToEndFlow:
                                 mock_instance.__aexit__.return_value = None
                                 mock_client.return_value = mock_instance
 
-                                # First call (initialize): return old messages
-                                # Second call (process): return new message
-                                mock_instance.get.side_effect = [
-                                    # initialize_state_if_needed call
-                                    MagicMock(
-                                        json=lambda: {
-                                            "ok": True,
-                                            "result": [
-                                                {"update_id": 100},
-                                                {"update_id": 101},
-                                            ],
-                                        },
-                                        raise_for_status=MagicMock(),
-                                    ),
-                                    # process_updates call (with offset=102)
-                                    MagicMock(
-                                        json=lambda: {
-                                            "ok": True,
-                                            "result": [
-                                                {
-                                                    "update_id": 102,
-                                                    "message": {
-                                                        "text": "/start",
-                                                        "chat": {"id": 123},
-                                                        "from": {"id": 456},
-                                                    },
-                                                }
-                                            ],
-                                        },
-                                        raise_for_status=MagicMock(),
-                                    ),
-                                ]
+                                # On first run, initialize sets state to 0, then
+                                # process_updates fetches with offset=1 and gets all messages
+                                mock_instance.get.return_value = MagicMock(
+                                    json=lambda: {
+                                        "ok": True,
+                                        "result": [
+                                            {
+                                                "update_id": 100,
+                                                "message": {
+                                                    "text": "/start",
+                                                    "chat": {"id": 123},
+                                                    "from": {"id": 456},
+                                                },
+                                            },
+                                            {
+                                                "update_id": 101,
+                                                "message": {
+                                                    "text": "/help",
+                                                    "chat": {"id": 123},
+                                                    "from": {"id": 456},
+                                                },
+                                            },
+                                        ],
+                                    },
+                                    raise_for_status=MagicMock(),
+                                )
 
                                 # Mock send_message
                                 mock_instance.post.return_value = MagicMock(
@@ -662,13 +632,17 @@ class TestEndToEndFlow:
                                 # Should succeed
                                 assert result == 0
 
-                                # State should be updated to 102
+                                # State should be updated to 101 (last processed update)
                                 assert state_file.exists()
                                 data = json.loads(state_file.read_text())
-                                assert data["last_update_id"] == 102
+                                assert data["last_update_id"] == 101
 
-                                # Should have made 2 GET calls (init + process)
-                                assert mock_instance.get.call_count == 2
+                                # Should have made 1 GET call (process_updates only)
+                                # initialize_state_if_needed no longer calls API
+                                assert mock_instance.get.call_count == 1
+
+                                # Should have sent 2 messages (/start and /help)
+                                assert mock_instance.post.call_count == 2
 
     @pytest.mark.asyncio
     async def test_full_flow_subsequent_run(self):
