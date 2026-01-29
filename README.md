@@ -165,20 +165,52 @@ You should see: `{"ok":true,"result":true,"description":"Webhook was set"}`
 
 ---
 
+### Alternative: Railway Deployment (Polling Mode)
+
+For a more reliable setup (like [nachyomi-bot](https://github.com/naorbrown/nachyomi-bot)), deploy to Railway with polling mode:
+
+1. Go to [railway.app](https://railway.app) and sign up (free)
+2. Click **"New Project"** → **"Deploy from GitHub repo"**
+3. Select your forked repository
+4. Add environment variable: `TELEGRAM_BOT_TOKEN`
+5. Railway will auto-detect the `Procfile` and deploy
+
+Then remove the webhook (switch to polling):
+```bash
+curl "https://api.telegram.org/bot<YOUR_TOKEN>/deleteWebhook"
+```
+
+Railway runs `bot.py` as a long-running process, which is more reliable than serverless webhooks.
+
+---
+
 ### Project Structure
 
 ```
 daf-yomi-history-bot/
 ├── api/
 │   └── webhook.py          # Vercel serverless function (handles commands)
+├── src/                    # Core modules
+│   ├── __init__.py         # Package exports
+│   ├── command_parser.py   # Command parsing and validation
+│   ├── rate_limiter.py     # Per-user rate limiting (5 req/min)
+│   └── message_builder.py  # Message formatting utilities
 ├── tests/
-│   └── test_bot.py         # Comprehensive test suite
+│   ├── unit/               # Unit tests (pytest)
+│   │   ├── test_command_parser.py
+│   │   ├── test_rate_limiter.py
+│   │   └── test_message_builder.py
+│   ├── fixtures/           # Test fixtures and mock data
+│   └── test_bot.py         # Integration tests
 ├── .github/
 │   └── workflows/
-│       ├── daily_video.yml # Scheduled daily video sender
+│       ├── daily_video.yml # Scheduled daily video sender (6 AM Israel)
 │       └── ci.yml          # CI/CD pipeline (tests, lint, security)
 ├── send_video.py           # GitHub Actions video sender
-├── bot.py                  # Polling bot (alternative to webhook)
+├── bot.py                  # Polling bot for Railway deployment
+├── test_apis.py            # API integration test script
+├── Procfile                # Railway deployment config
+├── railway.toml            # Railway settings
 ├── vercel.json             # Vercel configuration
 ├── README.md               # This file
 └── SECURITY.md             # Security documentation
@@ -193,7 +225,8 @@ daf-yomi-history-bot/
 | Service | Cost | Purpose |
 |---------|------|---------|
 | GitHub Actions | Free (public repos) | Daily scheduled videos |
-| Vercel | Free (hobby tier) | Interactive commands |
+| Vercel | Free (hobby tier) | Interactive commands (webhook) |
+| Railway | Free (hobby tier) | Interactive commands (polling) |
 | Hebcal API | Free | Daf Yomi schedule |
 | AllDaf.org | Free | Video content |
 | Telegram Bot API | Free | Message delivery |
@@ -221,22 +254,39 @@ See [SECURITY.md](SECURITY.md) for detailed security architecture.
 
 ```bash
 # Install dependencies
-pip install httpx beautifulsoup4 python-telegram-bot pytest
+pip install httpx beautifulsoup4 python-telegram-bot pytest pytest-cov
 
-# Run tests
+# Run all unit tests
 pytest tests/ -v
 
 # Run with coverage
-pytest tests/ -v --cov=api
+pytest tests/ -v --cov=src --cov=api --cov-report=term-missing
+
+# Run specific test file
+pytest tests/unit/test_command_parser.py -v
+
+# Run API integration tests
+python test_apis.py
 ```
+
+### Test Coverage
+
+The test suite covers:
+
+| Module | Tests | Coverage |
+|--------|-------|----------|
+| `command_parser` | 20+ tests | Command parsing, bot mentions, edge cases |
+| `rate_limiter` | 15+ tests | Rate limiting, per-user tracking, window expiration |
+| `message_builder` | 20+ tests | Message formatting, video captions |
+| `webhook` | 15+ tests | Command handling, API integration |
 
 ### CI/CD Pipeline
 
 Every push and PR automatically runs:
 
-1. **Unit Tests** - Verify bot logic
-2. **Integration Tests** - Test external API connections
-3. **Linting** - Code quality checks
+1. **Unit Tests** - Verify all modules with pytest
+2. **API Integration Tests** - Test external API connections
+3. **Linting** - Code quality checks (Ruff)
 4. **Security Scan** - Dependency vulnerability check
 5. **Validation** - Config file verification
 

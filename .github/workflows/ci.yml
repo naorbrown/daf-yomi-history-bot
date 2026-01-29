@@ -37,9 +37,14 @@ jobs:
         env:
           SKIP_INTEGRATION_TESTS: "1"
         run: |
-          pytest tests/ -v --tb=short --cov=api --cov-report=term-missing
+          pytest tests/ -v --tb=short --cov=src --cov=api --cov-report=term-missing
 
-      - name: Run integration tests
+      - name: Run API integration tests
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          python test_apis.py
+
+      - name: Run pytest integration tests
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           pytest tests/ -v --tb=short -k "Integration"
@@ -114,7 +119,7 @@ jobs:
 
       - name: Check required files exist
         run: |
-          files=("send_video.py" "api/webhook.py" "README.md" "SECURITY.md")
+          files=("send_video.py" "api/webhook.py" "README.md" "SECURITY.md" "src/__init__.py" "src/command_parser.py" "src/rate_limiter.py" "src/message_builder.py" "test_apis.py")
           for f in "${files[@]}"; do
             if [ -f "$f" ]; then
               echo "✅ $f exists"
