@@ -10,7 +10,6 @@ Tests cover:
 - Memory cleanup
 """
 
-import pytest
 import time
 import sys
 import os
@@ -35,7 +34,9 @@ class TestRateLimiter:
         user_id = 1
 
         for i in range(5):
-            assert limiter.is_allowed(user_id) is True, f"Request {i + 1} should be allowed"
+            assert limiter.is_allowed(user_id) is True, (
+                f"Request {i + 1} should be allowed"
+            )
 
     def test_blocks_requests_over_limit(self):
         """Test that requests over limit are blocked."""

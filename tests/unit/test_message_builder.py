@@ -177,7 +177,7 @@ class TestVideoInfo:
     def test_video_info_special_characters_in_title(self):
         """Test VideoInfo handles special characters in title."""
         video = VideoInfo(
-            title="Test's Title - With \"Quotes\" & Symbols!",
+            title='Test\'s Title - With "Quotes" & Symbols!',
             page_url="https://example.com/page",
             video_url=None,
             masechta="Berachos",

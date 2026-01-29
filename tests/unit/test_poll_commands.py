@@ -10,7 +10,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 # Add scripts to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
@@ -148,7 +147,9 @@ class TestStateManager:
     def test_get_rate_limits_no_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("poll_commands.STATE_DIR", Path(tmpdir)):
-                with patch("poll_commands.RATE_LIMIT_FILE", Path(tmpdir) / "rates.json"):
+                with patch(
+                    "poll_commands.RATE_LIMIT_FILE", Path(tmpdir) / "rates.json"
+                ):
                     state = StateManager()
                     assert state.get_rate_limits() == {}
 

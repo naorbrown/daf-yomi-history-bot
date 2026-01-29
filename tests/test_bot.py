@@ -58,25 +58,40 @@ class TestMasechtaNameMapping(unittest.TestCase):
         for hebcal_name, expected in test_cases:
             with self.subTest(hebcal_name=hebcal_name):
                 self.assertEqual(
-                    MASECHTA_NAME_MAP.get(hebcal_name, hebcal_name),
-                    expected
+                    MASECHTA_NAME_MAP.get(hebcal_name, hebcal_name), expected
                 )
 
     def test_unknown_mapping_returns_original(self):
         """Test that unknown names are returned unchanged."""
         unknown_name = "SomeUnknownMasechta"
         self.assertEqual(
-            MASECHTA_NAME_MAP.get(unknown_name, unknown_name),
-            unknown_name
+            MASECHTA_NAME_MAP.get(unknown_name, unknown_name), unknown_name
         )
 
     def test_all_mappings_exist(self):
         """Test that all expected masechtot have mappings."""
         expected_masechtot = [
-            "Berakhot", "Shabbat", "Sukkah", "Taanit", "Megillah",
-            "Chagigah", "Yevamot", "Ketubot", "Gittin", "Kiddushin",
-            "Bava Kamma", "Bava Batra", "Makkot", "Shevuot", "Horayot",
-            "Menachot", "Chullin", "Bekhorot", "Arakhin", "Keritot", "Niddah"
+            "Berakhot",
+            "Shabbat",
+            "Sukkah",
+            "Taanit",
+            "Megillah",
+            "Chagigah",
+            "Yevamot",
+            "Ketubot",
+            "Gittin",
+            "Kiddushin",
+            "Bava Kamma",
+            "Bava Batra",
+            "Makkot",
+            "Shevuot",
+            "Horayot",
+            "Menachot",
+            "Chullin",
+            "Bekhorot",
+            "Arakhin",
+            "Keritot",
+            "Niddah",
         ]
         for masechta in expected_masechtot:
             with self.subTest(masechta=masechta):
@@ -124,8 +139,7 @@ class TestWorkflowValidation(unittest.TestCase):
     def test_ci_workflow_exists(self):
         """Test CI workflow file exists."""
         workflow_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            ".github", "workflows", "ci.yml"
+            os.path.dirname(os.path.dirname(__file__)), ".github", "workflows", "ci.yml"
         )
         self.assertTrue(os.path.exists(workflow_path))
 
@@ -133,7 +147,9 @@ class TestWorkflowValidation(unittest.TestCase):
         """Test daily video workflow file exists."""
         workflow_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            ".github", "workflows", "daily_video.yml"
+            ".github",
+            "workflows",
+            "daily_video.yml",
         )
         self.assertTrue(os.path.exists(workflow_path))
 
@@ -141,7 +157,9 @@ class TestWorkflowValidation(unittest.TestCase):
         """Test poll-commands workflow file exists."""
         workflow_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            ".github", "workflows", "poll-commands.yml"
+            ".github",
+            "workflows",
+            "poll-commands.yml",
         )
         self.assertTrue(os.path.exists(workflow_path))
 
@@ -153,8 +171,7 @@ class TestWorkflowValidation(unittest.TestCase):
             self.skipTest("PyYAML not installed")
 
         workflows_dir = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            ".github", "workflows"
+            os.path.dirname(os.path.dirname(__file__)), ".github", "workflows"
         )
 
         for filename in os.listdir(workflows_dir):
@@ -172,33 +189,27 @@ class TestRequiredFilesExist(unittest.TestCase):
     def test_poll_commands_py_exists(self):
         """Test scripts/poll_commands.py exists."""
         filepath = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "scripts", "poll_commands.py"
+            os.path.dirname(os.path.dirname(__file__)), "scripts", "poll_commands.py"
         )
         self.assertTrue(os.path.exists(filepath))
 
     def test_send_video_py_exists(self):
         """Test send_video.py exists."""
         filepath = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "send_video.py"
+            os.path.dirname(os.path.dirname(__file__)), "send_video.py"
         )
         self.assertTrue(os.path.exists(filepath))
 
     def test_requirements_txt_exists(self):
         """Test requirements.txt exists."""
         filepath = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "requirements.txt"
+            os.path.dirname(os.path.dirname(__file__)), "requirements.txt"
         )
         self.assertTrue(os.path.exists(filepath))
 
     def test_src_modules_exist(self):
         """Test src modules exist."""
-        src_dir = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "src"
-        )
+        src_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "src")
         expected_files = [
             "__init__.py",
             "command_parser.py",
@@ -213,8 +224,7 @@ class TestRequiredFilesExist(unittest.TestCase):
     def test_state_directory_exists(self):
         """Test .github/state directory exists."""
         dirpath = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            ".github", "state"
+            os.path.dirname(os.path.dirname(__file__)), ".github", "state"
         )
         self.assertTrue(os.path.isdir(dirpath))
 
@@ -225,8 +235,7 @@ class TestPythonSyntax(unittest.TestCase):
     def test_poll_commands_py_syntax(self):
         """Test scripts/poll_commands.py has valid syntax."""
         filepath = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "scripts", "poll_commands.py"
+            os.path.dirname(os.path.dirname(__file__)), "scripts", "poll_commands.py"
         )
         with open(filepath) as f:
             source = f.read()
@@ -236,8 +245,7 @@ class TestPythonSyntax(unittest.TestCase):
     def test_send_video_py_syntax(self):
         """Test send_video.py has valid syntax."""
         filepath = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "send_video.py"
+            os.path.dirname(os.path.dirname(__file__)), "send_video.py"
         )
         with open(filepath) as f:
             source = f.read()
@@ -247,8 +255,7 @@ class TestPythonSyntax(unittest.TestCase):
     def test_test_apis_py_syntax(self):
         """Test test_apis.py has valid syntax."""
         filepath = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "test_apis.py"
+            os.path.dirname(os.path.dirname(__file__)), "test_apis.py"
         )
         with open(filepath) as f:
             source = f.read()
@@ -257,10 +264,7 @@ class TestPythonSyntax(unittest.TestCase):
 
     def test_src_modules_syntax(self):
         """Test src modules have valid syntax."""
-        src_dir = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "src"
-        )
+        src_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "src")
         for filename in os.listdir(src_dir):
             if filename.endswith(".py"):
                 filepath = os.path.join(src_dir, filename)

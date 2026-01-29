@@ -44,7 +44,7 @@ REQUEST_TIMEOUT = 30.0
 # Only send if Israel time is between 5:45 AM and 6:30 AM
 SEND_HOUR = 6
 SEND_WINDOW_MINUTES_BEFORE = 15  # 5:45 AM
-SEND_WINDOW_MINUTES_AFTER = 30   # 6:30 AM
+SEND_WINDOW_MINUTES_AFTER = 30  # 6:30 AM
 
 # Masechta name mapping: Hebcal uses different transliterations than AllDaf
 MASECHTA_NAME_MAP: dict[str, str] = {
@@ -126,7 +126,7 @@ def is_within_send_window() -> bool:
     # Convert to minutes since midnight for easier comparison
     current_minutes = current_hour * 60 + current_minute
     window_start = SEND_HOUR * 60 - SEND_WINDOW_MINUTES_BEFORE  # 5:45 AM = 345
-    window_end = SEND_HOUR * 60 + SEND_WINDOW_MINUTES_AFTER      # 6:30 AM = 390
+    window_end = SEND_HOUR * 60 + SEND_WINDOW_MINUTES_AFTER  # 6:30 AM = 390
 
     is_within = window_start <= current_minutes <= window_end
 

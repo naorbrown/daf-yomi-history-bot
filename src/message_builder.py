@@ -60,8 +60,7 @@ class MessageBuilder:
     )
 
     RATE_LIMITED_MESSAGE = (
-        "You're sending too many requests. "
-        "Please wait a moment before trying again."
+        "You're sending too many requests. Please wait a moment before trying again."
     )
 
     LOADING_MESSAGE = "Finding today's Daf Yomi history video..."

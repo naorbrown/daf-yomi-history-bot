@@ -70,13 +70,15 @@ def test_hebcal_api() -> bool:
         israel_tz = ZoneInfo("Asia/Jerusalem")
         today = datetime.now(israel_tz).strftime("%Y-%m-%d")
 
-        params = urlencode({
-            "v": "1",
-            "cfg": "json",
-            "F": "on",
-            "start": today,
-            "end": today,
-        })
+        params = urlencode(
+            {
+                "v": "1",
+                "cfg": "json",
+                "F": "on",
+                "start": today,
+                "end": today,
+            }
+        )
 
         url = f"https://www.hebcal.com/hebcal?{params}"
         print(f"  Fetching: {url}")
@@ -131,7 +133,7 @@ def test_alldaf_series_page() -> bool:
         link_pattern = r'<a[^>]+href="(/p/[^"]+)"[^>]*>'
         links = re.findall(link_pattern, html)
 
-        print_result(True, f"Series page accessible")
+        print_result(True, "Series page accessible")
         print(f"      Found {len(links)} video links")
         return True
 
