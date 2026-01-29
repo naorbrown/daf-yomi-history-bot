@@ -179,17 +179,17 @@ class TelegramAPI:
             return False
 
     async def get_updates(self, offset: Optional[int] = None) -> list[dict[str, Any]]:
-        """Fetch new updates from Telegram using POST (matches node-telegram-bot-api)."""
-        form_data: dict[str, Any] = {"timeout": 0, "limit": 100}
+        """Fetch new updates from Telegram using JSON body (matches node-telegram-bot-api)."""
+        params: dict[str, Any] = {"timeout": 0, "limit": 100}
         if offset is not None:
-            form_data["offset"] = offset
+            params["offset"] = offset
 
         logger.info(f"Calling getUpdates with offset={offset}")
         try:
             async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
                 response = await client.post(
                     f"{self.base_url}/getUpdates",
-                    data=form_data,
+                    json=params,
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -578,15 +578,6 @@ async def main() -> int:
     try:
         api = TelegramAPI(token)
         state = StateManager()
-
-        # Delete any existing webhook to ensure polling works
-        # This is critical - if a webhook is set, getUpdates will fail with 409
-        webhook_deleted = await api.delete_webhook()
-        if not webhook_deleted:
-            logger.warning(
-                "Failed to delete webhook - getUpdates may fail. "
-                "Run 'python scripts/fix_bot.py' to diagnose."
-            )
 
         last_id = state.get_last_update_id()
         logger.info(f"Last update ID: {last_id if last_id is not None else 'None (first run)'}")
