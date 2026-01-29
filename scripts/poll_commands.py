@@ -477,7 +477,12 @@ async def handle_command(
             )
 
             if video.video_url:
-                await api.send_video(chat_id, video.video_url, caption)
+                try:
+                    await api.send_video(chat_id, video.video_url, caption)
+                except Exception as video_err:
+                    # Video send failed, fall back to text message with link
+                    logger.warning(f"send_video failed, falling back to text: {video_err}")
+                    await api.send_message(chat_id, caption)
             else:
                 await api.send_message(chat_id, caption)
 
@@ -485,7 +490,10 @@ async def handle_command(
 
         except Exception as e:
             logger.error(f"Error fetching video: {e}")
-            await api.send_message(chat_id, ERROR_MESSAGE)
+            try:
+                await api.send_message(chat_id, ERROR_MESSAGE)
+            except Exception as send_err:
+                logger.error(f"Failed to send error message: {send_err}")
 
     else:
         # Unknown command - ignore silently
