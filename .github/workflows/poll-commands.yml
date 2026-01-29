@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: pip install httpx beautifulsoup4
 
+      - name: Warm video cache
+        run: python scripts/poll_commands.py --warm-cache
+
       - name: Poll and respond to commands
         run: python scripts/poll_commands.py
         env:

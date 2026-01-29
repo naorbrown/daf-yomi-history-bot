@@ -23,8 +23,9 @@ from poll_commands import (
     RateLimiter,
     parse_command,
     convert_masechta_name,
+    send_todays_video,
+    warm_cache,
     WELCOME_MESSAGE,
-    HELP_MESSAGE,
     ERROR_MESSAGE,
     RATE_LIMITED_MESSAGE,
 )
@@ -279,16 +280,8 @@ class TestMessages:
     def test_welcome_message_not_empty(self):
         assert len(WELCOME_MESSAGE) > 0
 
-    def test_welcome_message_contains_commands(self):
+    def test_welcome_message_contains_today_command(self):
         assert "/today" in WELCOME_MESSAGE
-        assert "/help" in WELCOME_MESSAGE
-
-    def test_help_message_not_empty(self):
-        assert len(HELP_MESSAGE) > 0
-
-    def test_help_message_contains_commands(self):
-        assert "/today" in HELP_MESSAGE
-        assert "/help" in HELP_MESSAGE
 
     def test_error_message_contains_link(self):
         assert "alldaf.org" in ERROR_MESSAGE.lower()
@@ -588,78 +581,77 @@ class TestEndToEndFlow:
     @pytest.mark.asyncio
     async def test_full_flow_first_run_with_pending_messages(self):
         """Test complete flow on first run with pending messages."""
-        from poll_commands import main, STATE_DIR, STATE_FILE
+        from poll_commands import main
 
         with tempfile.TemporaryDirectory() as tmpdir:
             state_file = Path(tmpdir) / "state.json"
             rate_file = Path(tmpdir) / "rate_limits.json"
+            cache_file = Path(tmpdir) / "video_cache.json"
+            # Pre-warm cache for instant responses
+            cache_data = {
+                "date": "2025-01-29",
+                "title": "Test Video",
+                "page_url": "https://alldaf.org/p/123",
+                "video_url": "https://cdn.jwplayer.com/videos/abc.mp4",
+                "masechta": "Berachos",
+                "daf": 2,
+            }
+            cache_file.write_text(json.dumps(cache_data))
 
             with patch("poll_commands.STATE_DIR", Path(tmpdir)):
                 with patch("poll_commands.STATE_FILE", state_file):
                     with patch("poll_commands.RATE_LIMIT_FILE", rate_file):
-                        with patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test_token"}):
-                            # Mock httpx.AsyncClient
-                            with patch("httpx.AsyncClient") as mock_client:
-                                mock_instance = AsyncMock()
-                                mock_instance.__aenter__.return_value = mock_instance
-                                mock_instance.__aexit__.return_value = None
-                                mock_client.return_value = mock_instance
+                        with patch("poll_commands.VIDEO_CACHE_FILE", cache_file):
+                            with patch("poll_commands.datetime") as mock_datetime:
+                                mock_now = MagicMock()
+                                mock_now.strftime.return_value = "2025-01-29"
+                                mock_datetime.now.return_value = mock_now
 
-                                # All API calls use POST
-                                # First call is deleteWebhook, then getUpdates, rest are sendMessage
-                                delete_webhook_response = MagicMock(
-                                    json=lambda: {"ok": True, "result": True},
-                                    raise_for_status=MagicMock(),
-                                )
-                                get_updates_response = MagicMock(
-                                    json=lambda: {
-                                        "ok": True,
-                                        "result": [
-                                            {
-                                                "update_id": 100,
-                                                "message": {
-                                                    "text": "/start",
-                                                    "chat": {"id": 123},
-                                                    "from": {"id": 456},
-                                                },
+                                with patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test_token"}):
+                                    with patch("httpx.AsyncClient") as mock_client:
+                                        mock_instance = AsyncMock()
+                                        mock_instance.__aenter__.return_value = mock_instance
+                                        mock_instance.__aexit__.return_value = None
+                                        mock_client.return_value = mock_instance
+
+                                        delete_webhook_response = MagicMock(
+                                            json=lambda: {"ok": True, "result": True},
+                                            raise_for_status=MagicMock(),
+                                        )
+                                        get_updates_response = MagicMock(
+                                            json=lambda: {
+                                                "ok": True,
+                                                "result": [
+                                                    {
+                                                        "update_id": 100,
+                                                        "message": {
+                                                            "text": "/today",
+                                                            "chat": {"id": 123},
+                                                            "from": {"id": 456},
+                                                        },
+                                                    },
+                                                ],
                                             },
-                                            {
-                                                "update_id": 101,
-                                                "message": {
-                                                    "text": "/help",
-                                                    "chat": {"id": 123},
-                                                    "from": {"id": 456},
-                                                },
-                                            },
-                                        ],
-                                    },
-                                    raise_for_status=MagicMock(),
-                                )
-                                send_message_response = MagicMock(
-                                    json=lambda: {"ok": True, "result": {}},
-                                    raise_for_status=MagicMock(),
-                                )
+                                            raise_for_status=MagicMock(),
+                                        )
+                                        send_response = MagicMock(
+                                            json=lambda: {"ok": True, "result": {}},
+                                            raise_for_status=MagicMock(),
+                                        )
 
-                                # First POST is deleteWebhook, then getUpdates, then 2 sendMessage calls
-                                mock_instance.post.side_effect = [
-                                    delete_webhook_response,
-                                    get_updates_response,
-                                    send_message_response,
-                                    send_message_response,
-                                ]
+                                        # deleteWebhook, getUpdates, sendVideo
+                                        mock_instance.post.side_effect = [
+                                            delete_webhook_response,
+                                            get_updates_response,
+                                            send_response,
+                                        ]
 
-                                result = await main()
+                                        result = await main()
 
-                                # Should succeed
-                                assert result == 0
-
-                                # State should be updated to 101 (last processed update)
-                                assert state_file.exists()
-                                data = json.loads(state_file.read_text())
-                                assert data["last_update_id"] == 101
-
-                                # Should have made 4 POST calls (1 deleteWebhook + 1 getUpdates + 2 sendMessage)
-                                assert mock_instance.post.call_count == 4
+                                        assert result == 0
+                                        assert state_file.exists()
+                                        data = json.loads(state_file.read_text())
+                                        assert data["last_update_id"] == 100
 
     @pytest.mark.asyncio
     async def test_full_flow_subsequent_run(self):
@@ -669,61 +661,327 @@ class TestEndToEndFlow:
         with tempfile.TemporaryDirectory() as tmpdir:
             state_file = Path(tmpdir) / "state.json"
             rate_file = Path(tmpdir) / "rate_limits.json"
+            cache_file = Path(tmpdir) / "video_cache.json"
 
-            # Pre-existing state with last_update_id = 100
             state_file.write_text(json.dumps({"last_update_id": 100}))
+            cache_data = {
+                "date": "2025-01-29",
+                "title": "Test Video",
+                "page_url": "https://alldaf.org/p/123",
+                "video_url": "https://cdn.jwplayer.com/videos/abc.mp4",
+                "masechta": "Berachos",
+                "daf": 2,
+            }
+            cache_file.write_text(json.dumps(cache_data))
 
             with patch("poll_commands.STATE_DIR", Path(tmpdir)):
                 with patch("poll_commands.STATE_FILE", state_file):
                     with patch("poll_commands.RATE_LIMIT_FILE", rate_file):
-                        with patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test_token"}):
-                            with patch("httpx.AsyncClient") as mock_client:
-                                mock_instance = AsyncMock()
-                                mock_instance.__aenter__.return_value = mock_instance
-                                mock_instance.__aexit__.return_value = None
-                                mock_client.return_value = mock_instance
+                        with patch("poll_commands.VIDEO_CACHE_FILE", cache_file):
+                            with patch("poll_commands.datetime") as mock_datetime:
+                                mock_now = MagicMock()
+                                mock_now.strftime.return_value = "2025-01-29"
+                                mock_datetime.now.return_value = mock_now
 
-                                # All API calls use POST
-                                # First call is deleteWebhook, then getUpdates, rest are sendMessage
-                                delete_webhook_response = MagicMock(
-                                    json=lambda: {"ok": True, "result": True},
-                                    raise_for_status=MagicMock(),
-                                )
-                                get_updates_response = MagicMock(
-                                    json=lambda: {
-                                        "ok": True,
-                                        "result": [
-                                            {
-                                                "update_id": 101,
-                                                "message": {
-                                                    "text": "/help",
-                                                    "chat": {"id": 789},
-                                                    "from": {"id": 111},
-                                                },
-                                            }
-                                        ],
-                                    },
-                                    raise_for_status=MagicMock(),
-                                )
-                                send_message_response = MagicMock(
-                                    json=lambda: {"ok": True, "result": {}},
-                                    raise_for_status=MagicMock(),
+                                with patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test_token"}):
+                                    with patch("httpx.AsyncClient") as mock_client:
+                                        mock_instance = AsyncMock()
+                                        mock_instance.__aenter__.return_value = mock_instance
+                                        mock_instance.__aexit__.return_value = None
+                                        mock_client.return_value = mock_instance
+
+                                        delete_webhook_response = MagicMock(
+                                            json=lambda: {"ok": True, "result": True},
+                                            raise_for_status=MagicMock(),
+                                        )
+                                        get_updates_response = MagicMock(
+                                            json=lambda: {
+                                                "ok": True,
+                                                "result": [
+                                                    {
+                                                        "update_id": 101,
+                                                        "message": {
+                                                            "text": "/today",
+                                                            "chat": {"id": 789},
+                                                            "from": {"id": 111},
+                                                        },
+                                                    }
+                                                ],
+                                            },
+                                            raise_for_status=MagicMock(),
+                                        )
+                                        send_response = MagicMock(
+                                            json=lambda: {"ok": True, "result": {}},
+                                            raise_for_status=MagicMock(),
+                                        )
+
+                                        mock_instance.post.side_effect = [
+                                            delete_webhook_response,
+                                            get_updates_response,
+                                            send_response,
+                                        ]
+
+                                        result = await main()
+
+                                        assert result == 0
+                                        data = json.loads(state_file.read_text())
+                                        assert data["last_update_id"] == 101
+
+
+class TestSendTodaysVideo:
+    """Tests for send_todays_video function."""
+
+    @pytest.mark.asyncio
+    async def test_sends_cached_video(self):
+        """Test that cached video is sent without external API calls."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_file = Path(tmpdir) / "video_cache.json"
+            cache_data = {
+                "date": "2025-01-29",
+                "title": "Test Video",
+                "page_url": "https://alldaf.org/p/123",
+                "video_url": "https://cdn.jwplayer.com/videos/abc.mp4",
+                "masechta": "Berachos",
+                "daf": 2,
+            }
+            cache_file.write_text(json.dumps(cache_data))
+
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.VIDEO_CACHE_FILE", cache_file):
+                    with patch("poll_commands.datetime") as mock_datetime:
+                        # Mock Israel timezone time
+                        mock_now = MagicMock()
+                        mock_now.strftime.return_value = "2025-01-29"
+                        mock_datetime.now.return_value = mock_now
+
+                        state = StateManager()
+                        api = AsyncMock()
+                        api.send_video.return_value = {"ok": True}
+
+                        result = await send_todays_video(api, 123, state, 456)
+
+                        assert result is True
+                        api.send_video.assert_called_once()
+                        # Verify caption contains expected info
+                        call_args = api.send_video.call_args
+                        assert "Berachos 2" in call_args[0][2]
+
+    @pytest.mark.asyncio
+    async def test_sends_error_on_failure(self):
+        """Test that error message is sent when video fetch fails."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.VIDEO_CACHE_FILE", Path(tmpdir) / "cache.json"):
+                    with patch("poll_commands.datetime") as mock_datetime:
+                        mock_now = MagicMock()
+                        mock_now.strftime.return_value = "2025-01-29"
+                        mock_datetime.now.return_value = mock_now
+
+                        with patch("poll_commands.get_todays_daf") as mock_daf:
+                            mock_daf.side_effect = Exception("API error")
+
+                            state = StateManager()
+                            api = AsyncMock()
+
+                            result = await send_todays_video(api, 123, state, 456)
+
+                            assert result is False
+                            api.send_message.assert_called_once()
+                            # Check error message was sent
+                            call_args = api.send_message.call_args
+                            assert "alldaf.org" in call_args[0][1].lower()
+
+
+class TestWarmCache:
+    """Tests for warm_cache function."""
+
+    @pytest.mark.asyncio
+    async def test_warms_cold_cache(self):
+        """Test that warm_cache fetches and caches video when cache is cold."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_file = Path(tmpdir) / "video_cache.json"
+
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.VIDEO_CACHE_FILE", cache_file):
+                    with patch("poll_commands.datetime") as mock_datetime:
+                        mock_now = MagicMock()
+                        mock_now.strftime.return_value = "2025-01-29"
+                        mock_datetime.now.return_value = mock_now
+
+                        with patch("poll_commands.get_todays_daf") as mock_daf:
+                            with patch("poll_commands.get_jewish_history_video") as mock_video:
+                                mock_daf.return_value = DafInfo(masechta="Berachos", daf=2)
+                                mock_video.return_value = VideoInfo(
+                                    title="Test Video",
+                                    page_url="https://alldaf.org/p/123",
+                                    video_url="https://cdn.jwplayer.com/videos/abc.mp4",
+                                    masechta="Berachos",
+                                    daf=2,
                                 )
 
-                                # First POST is deleteWebhook, then getUpdates, then sendMessage
-                                mock_instance.post.side_effect = [
-                                    delete_webhook_response,
-                                    get_updates_response,
-                                    send_message_response,
-                                ]
-
-                                result = await main()
+                                result = await warm_cache()
 
                                 assert result == 0
+                                assert cache_file.exists()
+                                cached = json.loads(cache_file.read_text())
+                                assert cached["date"] == "2025-01-29"
+                                assert cached["title"] == "Test Video"
 
-                                # State should be updated to 101
-                                data = json.loads(state_file.read_text())
-                                assert data["last_update_id"] == 101
+    @pytest.mark.asyncio
+    async def test_skips_warm_cache(self):
+        """Test that warm_cache skips if cache is already warm."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_file = Path(tmpdir) / "video_cache.json"
+            cache_data = {
+                "date": "2025-01-29",
+                "title": "Already Cached",
+                "page_url": "https://alldaf.org/p/123",
+                "video_url": "https://cdn.jwplayer.com/videos/abc.mp4",
+                "masechta": "Berachos",
+                "daf": 2,
+            }
+            cache_file.write_text(json.dumps(cache_data))
 
-                                # Should make 3 POST calls (1 deleteWebhook + 1 getUpdates + 1 sendMessage)
-                                assert mock_instance.post.call_count == 3
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.VIDEO_CACHE_FILE", cache_file):
+                    with patch("poll_commands.datetime") as mock_datetime:
+                        mock_now = MagicMock()
+                        mock_now.strftime.return_value = "2025-01-29"
+                        mock_datetime.now.return_value = mock_now
+
+                        with patch("poll_commands.get_todays_daf") as mock_daf:
+                            result = await warm_cache()
+
+                            assert result == 0
+                            # Should not have fetched new daf
+                            mock_daf.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handles_fetch_error(self):
+        """Test that warm_cache returns error code on failure."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.VIDEO_CACHE_FILE", Path(tmpdir) / "cache.json"):
+                    with patch("poll_commands.datetime") as mock_datetime:
+                        mock_now = MagicMock()
+                        mock_now.strftime.return_value = "2025-01-29"
+                        mock_datetime.now.return_value = mock_now
+
+                        with patch("poll_commands.get_todays_daf") as mock_daf:
+                            mock_daf.side_effect = Exception("Network error")
+
+                            result = await warm_cache()
+
+                            assert result == 1
+
+
+class TestCommandFlow:
+    """Tests for complete command handling flow."""
+
+    @pytest.mark.asyncio
+    async def test_start_sends_welcome_and_video(self):
+        """Test that /start sends welcome message followed by today's video."""
+        from poll_commands import handle_command
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_file = Path(tmpdir) / "video_cache.json"
+            rate_file = Path(tmpdir) / "rates.json"
+            cache_data = {
+                "date": "2025-01-29",
+                "title": "Test Video",
+                "page_url": "https://alldaf.org/p/123",
+                "video_url": "https://cdn.jwplayer.com/videos/abc.mp4",
+                "masechta": "Berachos",
+                "daf": 2,
+            }
+            cache_file.write_text(json.dumps(cache_data))
+
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.VIDEO_CACHE_FILE", cache_file):
+                    with patch("poll_commands.RATE_LIMIT_FILE", rate_file):
+                        with patch("poll_commands.datetime") as mock_datetime:
+                            mock_now = MagicMock()
+                            mock_now.strftime.return_value = "2025-01-29"
+                            mock_datetime.now.return_value = mock_now
+
+                            state = StateManager()
+                            rate_limiter = RateLimiter(state)
+                            api = AsyncMock()
+                            api.send_message.return_value = {"ok": True}
+                            api.send_video.return_value = {"ok": True}
+
+                            await handle_command(api, 123, "start", rate_limiter, 456, state)
+
+                            # Should send welcome message first, then video
+                            assert api.send_message.call_count == 1
+                            assert api.send_video.call_count == 1
+                            # First call should be welcome message
+                            welcome_call = api.send_message.call_args_list[0]
+                            assert "Welcome" in welcome_call[0][1]
+
+    @pytest.mark.asyncio
+    async def test_help_sends_video(self):
+        """Test that /help sends today's video (same as /today)."""
+        from poll_commands import handle_command
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_file = Path(tmpdir) / "video_cache.json"
+            rate_file = Path(tmpdir) / "rates.json"
+            cache_data = {
+                "date": "2025-01-29",
+                "title": "Test Video",
+                "page_url": "https://alldaf.org/p/123",
+                "video_url": "https://cdn.jwplayer.com/videos/abc.mp4",
+                "masechta": "Berachos",
+                "daf": 2,
+            }
+            cache_file.write_text(json.dumps(cache_data))
+
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.VIDEO_CACHE_FILE", cache_file):
+                    with patch("poll_commands.RATE_LIMIT_FILE", rate_file):
+                        with patch("poll_commands.datetime") as mock_datetime:
+                            mock_now = MagicMock()
+                            mock_now.strftime.return_value = "2025-01-29"
+                            mock_datetime.now.return_value = mock_now
+
+                            state = StateManager()
+                            rate_limiter = RateLimiter(state)
+                            api = AsyncMock()
+                            api.send_video.return_value = {"ok": True}
+
+                            await handle_command(api, 123, "help", rate_limiter, 456, state)
+
+                            # Should send video
+                            api.send_video.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_applies_to_help_and_today(self):
+        """Test that rate limiting applies to /help and /today but not /start."""
+        from poll_commands import handle_command
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rate_file = Path(tmpdir) / "rates.json"
+
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.RATE_LIMIT_FILE", rate_file):
+                    state = StateManager()
+                    rate_limiter = RateLimiter(state)
+                    api = AsyncMock()
+                    api.send_message.return_value = {"ok": True}
+
+                    # Exhaust rate limit
+                    for _ in range(5):
+                        rate_limiter.is_allowed(456)
+
+                    # /start should still work (not rate limited)
+                    with patch("poll_commands.send_todays_video", new_callable=AsyncMock):
+                        await handle_command(api, 123, "start", rate_limiter, 456, state)
+                        # Should have sent welcome (not rate limit message)
+                        assert "Welcome" in api.send_message.call_args[0][1]
+
+                    api.reset_mock()
+
+                    # /today should be rate limited
+                    await handle_command(api, 123, "today", rate_limiter, 456, state)
+                    assert "too many" in api.send_message.call_args[0][1].lower()

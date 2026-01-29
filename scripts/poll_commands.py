@@ -91,39 +91,15 @@ MASECHTA_NAME_MAP: dict[str, str] = {
 # Bot messages (plain text - no Markdown to avoid parsing issues)
 WELCOME_MESSAGE = """Welcome to Daf Yomi History Bot!
 
-I send you daily Jewish History videos from Dr. Henry Abramson's series on AllDaf.org, matching the Daf Yomi schedule.
+Get daily Jewish History videos by Dr. Henry Abramson, matching the Daf Yomi schedule.
 
-Commands:
-/today - Get today's video now
-/help - Show this message
-
-You'll automatically receive the daily video every morning at 6:00 AM Israel time.
-
-Enjoy your learning!"""
-
-HELP_MESSAGE = """Daf Yomi History Bot - Help
-
-Available Commands:
-
-/today - Get today's Daf Yomi history video
-/help - Show this help message
-
-About:
-This bot sends Jewish History videos from AllDaf.org's series by Dr. Henry Abramson. Each video corresponds to the daily Daf Yomi page.
-
-Schedule:
-Daily videos are sent automatically at 6:00 AM Israel time.
-
-Note: Commands are processed every 5 minutes."""
+Use /today anytime to get today's video."""
 
 ERROR_MESSAGE = """Sorry, I couldn't find today's video. Please try again later.
 
-You can also visit AllDaf.org directly:
-https://alldaf.org/series/3940"""
+Visit AllDaf.org directly: https://alldaf.org/series/3940"""
 
-RATE_LIMITED_MESSAGE = (
-    """You're sending too many requests. Please wait a minute and try again."""
-)
+RATE_LIMITED_MESSAGE = "Too many requests. Please wait a minute and try again."
 
 
 @dataclass
@@ -474,6 +450,72 @@ def parse_command(text: Optional[str]) -> Optional[str]:
     return None
 
 
+async def send_todays_video(
+    api: TelegramAPI,
+    chat_id: int,
+    state: StateManager,
+    user_id: int,
+) -> bool:
+    """Send today's video to the user. Returns True on success."""
+    try:
+        # Get today's date in Israel timezone for cache key
+        israel_now = datetime.now(ISRAEL_TZ)
+        today_str = israel_now.strftime("%Y-%m-%d")
+
+        # Check cache first for near-instant response
+        cached = state.get_cached_video(today_str)
+        if cached:
+            video = VideoInfo(
+                title=cached["title"],
+                page_url=cached["page_url"],
+                video_url=cached.get("video_url"),
+                masechta=cached["masechta"],
+                daf=cached["daf"],
+            )
+            logger.info(f"Using cached video: {video.title}")
+        else:
+            # Fetch from external APIs and cache result
+            daf = await get_todays_daf()
+            video = await get_jewish_history_video(daf)
+
+            # Cache the result for future requests
+            cache_data = {
+                "date": today_str,
+                "title": video.title,
+                "page_url": video.page_url,
+                "video_url": video.video_url,
+                "masechta": video.masechta,
+                "daf": video.daf,
+            }
+            state.save_video_cache(cache_data)
+
+        caption = (
+            f"{video.masechta} {video.daf}\n"
+            f"{video.title}\n\n"
+            f"{video.page_url}"
+        )
+
+        if video.video_url:
+            try:
+                await api.send_video(chat_id, video.video_url, caption)
+            except Exception as video_err:
+                logger.warning(f"send_video failed, falling back to text: {video_err}")
+                await api.send_message(chat_id, caption)
+        else:
+            await api.send_message(chat_id, caption)
+
+        logger.info(f"Sent video to user {user_id}: {video.title}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error fetching video: {e}")
+        try:
+            await api.send_message(chat_id, ERROR_MESSAGE)
+        except Exception as send_err:
+            logger.error(f"Failed to send error message: {send_err}")
+        return False
+
+
 async def handle_command(
     api: TelegramAPI,
     chat_id: int,
@@ -490,72 +532,14 @@ async def handle_command(
         return
 
     if command == "start":
+        # Send welcome message, then today's video
         await api.send_message(chat_id, WELCOME_MESSAGE)
-        logger.info(f"Sent welcome to user {user_id}")
+        await send_todays_video(api, chat_id, state, user_id)
+        logger.info(f"Sent welcome + video to user {user_id}")
 
-    elif command == "help":
-        await api.send_message(chat_id, HELP_MESSAGE)
-        logger.info(f"Sent help to user {user_id}")
-
-    elif command == "today":
-        try:
-            # Get today's date in Israel timezone for cache key
-            israel_now = datetime.now(ISRAEL_TZ)
-            today_str = israel_now.strftime("%Y-%m-%d")
-
-            # Check cache first for near-instant response
-            cached = state.get_cached_video(today_str)
-            if cached:
-                # Use cached data - no external API calls needed
-                video = VideoInfo(
-                    title=cached["title"],
-                    page_url=cached["page_url"],
-                    video_url=cached.get("video_url"),
-                    masechta=cached["masechta"],
-                    daf=cached["daf"],
-                )
-                logger.info(f"Using cached video: {video.title}")
-            else:
-                # Fetch from external APIs and cache result
-                daf = await get_todays_daf()
-                video = await get_jewish_history_video(daf)
-
-                # Cache the result for future requests
-                cache_data = {
-                    "date": today_str,
-                    "title": video.title,
-                    "page_url": video.page_url,
-                    "video_url": video.video_url,
-                    "masechta": video.masechta,
-                    "daf": video.daf,
-                }
-                state.save_video_cache(cache_data)
-
-            caption = (
-                f"Today's Daf Yomi History\n\n"
-                f"{video.masechta} {video.daf}\n"
-                f"{video.title}\n\n"
-                f"View on AllDaf.org: {video.page_url}"
-            )
-
-            if video.video_url:
-                try:
-                    await api.send_video(chat_id, video.video_url, caption)
-                except Exception as video_err:
-                    # Video send failed, fall back to text message with link
-                    logger.warning(f"send_video failed, falling back to text: {video_err}")
-                    await api.send_message(chat_id, caption)
-            else:
-                await api.send_message(chat_id, caption)
-
-            logger.info(f"Sent video to user {user_id}: {video.title}")
-
-        except Exception as e:
-            logger.error(f"Error fetching video: {e}")
-            try:
-                await api.send_message(chat_id, ERROR_MESSAGE)
-            except Exception as send_err:
-                logger.error(f"Failed to send error message: {send_err}")
+    elif command in ("today", "help"):
+        # /today and /help both send today's video
+        await send_todays_video(api, chat_id, state, user_id)
 
     else:
         # Unknown command - ignore silently
@@ -664,7 +648,50 @@ async def main() -> int:
         await api.close()
 
 
+async def warm_cache() -> int:
+    """Pre-warm the video cache for today's daf. Returns 0 on success."""
+    logger.info("=" * 50)
+    logger.info("Daf Yomi History Bot - Cache Warming")
+    logger.info("=" * 50)
+
+    try:
+        state = StateManager()
+        israel_now = datetime.now(ISRAEL_TZ)
+        today_str = israel_now.strftime("%Y-%m-%d")
+
+        # Check if already cached
+        cached = state.get_cached_video(today_str)
+        if cached:
+            logger.info(f"Cache already warm for {today_str}: {cached.get('title')}")
+            return 0
+
+        # Fetch and cache
+        logger.info(f"Warming cache for {today_str}...")
+        daf = await get_todays_daf()
+        video = await get_jewish_history_video(daf)
+
+        cache_data = {
+            "date": today_str,
+            "title": video.title,
+            "page_url": video.page_url,
+            "video_url": video.video_url,
+            "masechta": video.masechta,
+            "daf": video.daf,
+        }
+        state.save_video_cache(cache_data)
+        logger.info(f"Cache warmed successfully: {video.title}")
+        return 0
+
+    except Exception as e:
+        logger.exception(f"Error warming cache: {e}")
+        return 1
+
+
 if __name__ == "__main__":
     import asyncio
 
-    sys.exit(asyncio.run(main()))
+    # Support --warm-cache flag for pre-warming
+    if len(sys.argv) > 1 and sys.argv[1] == "--warm-cache":
+        sys.exit(asyncio.run(warm_cache()))
+    else:
+        sys.exit(asyncio.run(main()))
