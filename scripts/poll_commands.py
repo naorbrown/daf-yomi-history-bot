@@ -381,15 +381,15 @@ async def get_jewish_history_video(daf: DafInfo) -> VideoInfo:
             if masechta_lower not in link_text_lower:
                 continue
 
-            # Check for daf number match (same logic as send_video.py)
+            # Check for daf number match with word boundary to avoid partial matches
+            # e.g., "Sanhedrin 2" should NOT match "Sanhedrin 22"
+            # All patterns use regex with \b word boundary at the end
             patterns = [
-                f"{masechta_lower} {daf.daf}",
-                f"{masechta_lower} daf {daf.daf}",
+                rf"{re.escape(masechta_lower)}\s+{daf.daf}\b",  # "masechta N"
+                rf"{re.escape(masechta_lower)}\s+daf\s+{daf.daf}\b",  # "masechta daf N"
             ]
 
-            if any(p in link_text_lower for p in patterns) or re.search(
-                rf"{masechta_lower}\s+{daf.daf}\b", link_text_lower
-            ):
+            if any(re.search(p, link_text_lower) for p in patterns):
                 page_url = f"{ALLDAF_BASE_URL}{href}"
                 title = link_text
                 logger.info(f"Found video: {title}")
