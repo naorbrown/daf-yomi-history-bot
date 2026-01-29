@@ -42,7 +42,6 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: python scripts/poll_commands.py
-        continue-on-error: true
 
       - name: Commit state changes
         run: |
