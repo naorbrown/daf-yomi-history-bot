@@ -9,7 +9,7 @@ A Telegram bot that delivers daily Jewish History videos from [AllDaf.org](https
 
 ---
 
-## 🚀 Start Using the Bot
+## Start Using the Bot
 
 **Open Telegram and start chatting:**
 
@@ -23,7 +23,7 @@ That's it! You'll receive a daily video every morning at 6:00 AM Israel time.
 
 ---
 
-## 📱 Bot Commands
+## Bot Commands
 
 | Command | What It Does |
 |---------|--------------|
@@ -33,7 +33,7 @@ That's it! You'll receive a daily video every morning at 6:00 AM Israel time.
 
 ---
 
-## ❓ FAQ
+## FAQ
 
 ### What is this bot?
 
@@ -54,7 +54,7 @@ No! Just tap Start once, and you'll receive videos automatically every day.
 
 ---
 
-## 🛠 For Developers
+## For Developers
 
 Want to run your own instance? See the [Developer Guide](#developer-guide) below.
 
@@ -70,14 +70,14 @@ Want to run your own instance? See the [Developer Guide](#developer-guide) below
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │   ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐  │
-│   │ GitHub Actions  │     │    Vercel       │     │   Telegram      │  │
-│   │ (Scheduled)     │     │ (Serverless)    │     │   Bot API       │  │
+│   │ GitHub Actions  │     │    Railway      │     │   Telegram      │  │
+│   │ (Daily Videos)  │     │ (Bot Polling)   │     │   Bot API       │  │
 │   └────────┬────────┘     └────────┬────────┘     └────────┬────────┘  │
 │            │                       │                       │           │
 │            ▼                       ▼                       │           │
 │   ┌─────────────────┐     ┌─────────────────┐              │           │
-│   │ Daily 6AM IST   │     │ Webhook Handler │◀─────────────┘           │
-│   │ send_video.py   │     │ api/webhook.py  │                          │
+│   │ Daily 6AM IST   │     │  Bot Commands   │◀─────────────┘           │
+│   │ send_video.py   │     │    bot.py       │                          │
 │   └────────┬────────┘     └────────┬────────┘                          │
 │            │                       │                                    │
 │            └───────────┬───────────┘                                    │
@@ -95,11 +95,11 @@ Want to run your own instance? See the [Developer Guide](#developer-guide) below
 
 - A Telegram account
 - A GitHub account
-- A Vercel account (free) - for interactive commands
+- A Railway account (free) - for interactive bot commands
 
 ---
 
-### Quick Setup (5 minutes)
+### Quick Setup
 
 #### Step 1: Fork This Repository
 
@@ -135,33 +135,23 @@ Go to **Actions** tab → Click **"I understand my workflows, go ahead and enabl
 
 ---
 
-### Enable Interactive Commands (Vercel Deployment)
+### Enable Interactive Commands (Railway Deployment)
 
-To make `/today`, `/start`, and `/help` work for any user:
+To make `/today`, `/start`, and `/help` work for any user, deploy to Railway:
 
-#### Step 1: Deploy to Vercel
+#### Step 1: Deploy to Railway
 
-1. Go to [vercel.com](https://vercel.com) and sign up (free)
-2. Click **"Add New Project"**
-3. Import your forked GitHub repository
-4. Add environment variable:
-   - Name: `TELEGRAM_BOT_TOKEN`
-   - Value: Your bot token
-5. Click **Deploy**
+1. Go to [railway.app](https://railway.app) and sign up (free)
+2. Click **"New Project"** → **"Deploy from GitHub repo"**
+3. Select your forked repository
+4. Add environment variable: `TELEGRAM_BOT_TOKEN`
+5. Railway will auto-detect the `Procfile` and deploy `bot.py`
 
-#### Step 2: Set Up Webhook
+#### Step 2: Verify Bot is Running
 
-After deployment, get your Vercel URL (e.g., `https://your-bot.vercel.app`)
+Check Railway logs - you should see "Starting Daf Yomi History Bot (polling mode)..."
 
-Run this command (replace the values):
-
-```bash
-curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=https://<YOUR_VERCEL_URL>/api/webhook"
-```
-
-You should see: `{"ok":true,"result":true,"description":"Webhook was set"}`
-
-✅ **Done!** Commands now work for all users instantly.
+✅ **Done!** Commands now work for all users.
 
 ---
 
@@ -169,38 +159,49 @@ You should see: `{"ok":true,"result":true,"description":"Webhook was set"}`
 
 ```
 daf-yomi-history-bot/
-├── api/
-│   └── webhook.py          # Vercel serverless function (handles commands)
+├── src/                    # Core modules
+│   ├── __init__.py         # Package exports
+│   ├── command_parser.py   # Command parsing and validation
+│   ├── rate_limiter.py     # Per-user rate limiting (5 req/min)
+│   └── message_builder.py  # Message formatting utilities
 ├── tests/
-│   └── test_bot.py         # Comprehensive test suite
+│   ├── unit/               # Unit tests (pytest)
+│   │   ├── test_command_parser.py
+│   │   ├── test_rate_limiter.py
+│   │   └── test_message_builder.py
+│   ├── fixtures/           # Test fixtures and mock data
+│   └── test_bot.py         # Integration tests
 ├── .github/
 │   └── workflows/
-│       ├── daily_video.yml # Scheduled daily video sender
+│       ├── daily_video.yml # Scheduled daily video sender (6 AM Israel)
 │       └── ci.yml          # CI/CD pipeline (tests, lint, security)
+├── bot.py                  # Telegram bot with polling (Railway)
 ├── send_video.py           # GitHub Actions video sender
-├── bot.py                  # Polling bot (alternative to webhook)
-├── vercel.json             # Vercel configuration
+├── test_apis.py            # API integration test script
+├── Procfile                # Railway deployment config
+├── railway.toml            # Railway settings
+├── requirements.txt        # Python dependencies
 ├── README.md               # This file
 └── SECURITY.md             # Security documentation
 ```
 
 ---
 
-## 💰 Cost
+## Cost
 
 **Free. Forever.**
 
 | Service | Cost | Purpose |
 |---------|------|---------|
 | GitHub Actions | Free (public repos) | Daily scheduled videos |
-| Vercel | Free (hobby tier) | Interactive commands |
+| Railway | Free (hobby tier) | Interactive bot commands |
 | Hebcal API | Free | Daf Yomi schedule |
 | AllDaf.org | Free | Video content |
 | Telegram Bot API | Free | Message delivery |
 
 ---
 
-## 🔒 Security
+## Security
 
 Production-grade security:
 
@@ -215,46 +216,62 @@ See [SECURITY.md](SECURITY.md) for detailed security architecture.
 
 ---
 
-## 🧪 Testing & QA
+## Testing & QA
 
 ### Run Tests Locally
 
 ```bash
 # Install dependencies
-pip install httpx beautifulsoup4 python-telegram-bot pytest
+pip install -r requirements.txt
+pip install pytest pytest-cov
 
-# Run tests
+# Run all unit tests
 pytest tests/ -v
 
 # Run with coverage
-pytest tests/ -v --cov=api
+pytest tests/ -v --cov=src --cov-report=term-missing
+
+# Run specific test file
+pytest tests/unit/test_command_parser.py -v
+
+# Run API integration tests
+python test_apis.py
 ```
+
+### Test Coverage
+
+The test suite covers:
+
+| Module | Tests | Coverage |
+|--------|-------|----------|
+| `command_parser` | 25 tests | Command parsing, bot mentions, edge cases |
+| `rate_limiter` | 14 tests | Rate limiting, per-user tracking, window expiration |
+| `message_builder` | 23 tests | Message formatting, video captions |
 
 ### CI/CD Pipeline
 
 Every push and PR automatically runs:
 
-1. **Unit Tests** - Verify bot logic
-2. **Integration Tests** - Test external API connections
-3. **Linting** - Code quality checks
+1. **Unit Tests** - Verify all modules with pytest
+2. **API Integration Tests** - Test external API connections
+3. **Linting** - Code quality checks (Ruff)
 4. **Security Scan** - Dependency vulnerability check
-5. **Validation** - Config file verification
+5. **Validation** - Config and syntax verification
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
-| Bot doesn't respond to commands | Deploy to Vercel and set up webhook |
+| Bot doesn't respond to commands | Deploy to Railway and check logs |
 | Video not found | Video may not exist for today's daf - check [AllDaf](https://alldaf.org/series/3940) |
 | Wrong daf displayed | Bot uses Israel timezone - verify at [Hebcal](https://www.hebcal.com/sedrot) |
 | Daily video not sending | Check GitHub Actions logs in your fork |
-| Webhook not working | Verify URL with `curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo` |
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -268,18 +285,18 @@ All PRs are automatically tested by CI/CD.
 
 ---
 
-## 📜 License
+## License
 
 MIT — see [LICENSE](LICENSE).
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [AllDaf.org](https://alldaf.org) & the Orthodox Union
 - [Dr. Henry Abramson](https://www.henryabramson.com/)
 - [Hebcal](https://www.hebcal.com/)
-- [Vercel](https://vercel.com/) for free serverless hosting
+- [Railway](https://railway.app/) for free hosting
 
 ---
 

@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """
-Daf Yomi History Telegram Bot
+Daf Yomi History Bot - APScheduler Version
 
-Sends the daily Daf Yomi Jewish History video from alldaf.org
-every morning at 6:00 AM Israel time.
+Alternative scheduler-based bot that sends the daily Daf Yomi Jewish History
+video from AllDaf.org every morning at 6:00 AM Israel time.
+
+This is an alternative to the GitHub Actions-based scheduler (send_video.py).
+Use this for self-hosted deployments where you want a long-running process.
+
+For serverless deployment, use GitHub Actions (send_video.py) instead.
 """
+
+from __future__ import annotations
 
 import asyncio
 import logging
@@ -14,272 +21,229 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import httpx
-from bs4 import BeautifulSoup
-from telegram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from bs4 import BeautifulSoup
+from telegram import Bot
 
 # Configure logging
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
-# Configuration - Set these environment variables
-TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
+# Configuration from environment
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-# Israel timezone
-ISRAEL_TZ = ZoneInfo('Asia/Jerusalem')
-
-# URLs
+# Constants
+ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 ALLDAF_BASE_URL = "https://alldaf.org"
+ALLDAF_SERIES_URL = f"{ALLDAF_BASE_URL}/series/3940"
+HEBCAL_API_URL = "https://www.hebcal.com/hebcal"
+REQUEST_TIMEOUT = 30.0
 
-# Mapping from Hebcal masechta names to AllDaf names
-MASECHTA_MAP = {
-    'Berakhot': 'Berachos',
-    'Shabbat': 'Shabbos',
-    'Sukkah': 'Succah',
-    'Taanit': 'Taanis',
-    'Megillah': 'Megilah',
-    'Chagigah': 'Chagiga',
-    'Yevamot': 'Yevamos',
-    'Ketubot': 'Kesuvos',
-    'Gittin': 'Gitin',
-    'Kiddushin': 'Kidushin',
-    'Bava Kamma': 'Bava Kama',
-    'Bava Batra': 'Bava Basra',
-    'Makkot': 'Makos',
-    'Shevuot': 'Shevuos',
-    'Horayot': 'Horayos',
-    'Menachot': 'Menachos',
-    'Chullin': 'Chulin',
-    'Bekhorot': 'Bechoros',
-    'Arakhin': 'Erchin',
-    'Keritot': 'Kerisus',
-    'Niddah': 'Nidah',
+# Masechta name mapping: Hebcal -> AllDaf format
+MASECHTA_NAME_MAP = {
+    "Berakhot": "Berachos",
+    "Shabbat": "Shabbos",
+    "Sukkah": "Succah",
+    "Taanit": "Taanis",
+    "Megillah": "Megilah",
+    "Chagigah": "Chagiga",
+    "Yevamot": "Yevamos",
+    "Ketubot": "Kesuvos",
+    "Gittin": "Gitin",
+    "Kiddushin": "Kidushin",
+    "Bava Kamma": "Bava Kama",
+    "Bava Batra": "Bava Basra",
+    "Makkot": "Makos",
+    "Shevuot": "Shevuos",
+    "Horayot": "Horayos",
+    "Menachot": "Menachos",
+    "Chullin": "Chulin",
+    "Bekhorot": "Bechoros",
+    "Arakhin": "Erchin",
+    "Keritot": "Kerisus",
+    "Niddah": "Nidah",
 }
 
 
 def convert_masechta_name(name: str) -> str:
     """Convert Hebcal masechta name to AllDaf format."""
-    return MASECHTA_MAP.get(name, name)
+    return MASECHTA_NAME_MAP.get(name, name)
 
 
-async def get_todays_daf_info() -> dict:
+async def get_todays_daf() -> dict:
     """
-    Fetch today's daf information from Hebcal API using Israel date.
-    Returns dict with masechta and daf number.
+    Fetch today's daf from Hebcal API using Israel date.
+
+    Returns:
+        Dict with masechta and daf number
     """
-    # Get today's date in Israel timezone
     israel_now = datetime.now(ISRAEL_TZ)
-    today_str = israel_now.strftime('%Y-%m-%d')
+    today_str = israel_now.strftime("%Y-%m-%d")
 
-    # Hebcal API for Daf Yomi
-    hebcal_url = f"https://www.hebcal.com/hebcal?v=1&cfg=json&F=on&start={today_str}&end={today_str}"
+    params = {
+        "v": "1",
+        "cfg": "json",
+        "F": "on",
+        "start": today_str,
+        "end": today_str,
+    }
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(hebcal_url)
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        response = await client.get(HEBCAL_API_URL, params=params)
         response.raise_for_status()
         data = response.json()
 
-        # Find Daf Yomi entry
-        for item in data.get('items', []):
-            if item.get('category') == 'dafyomi':
-                # Parse "Menachot 16" format
-                title = item.get('title', '')
-                match = re.match(r'(.+)\s+(\d+)', title)
+        for item in data.get("items", []):
+            if item.get("category") == "dafyomi":
+                title = item.get("title", "")
+                match = re.match(r"(.+)\s+(\d+)", title)
                 if match:
                     hebcal_masechta = match.group(1)
                     daf = int(match.group(2))
                     alldaf_masechta = convert_masechta_name(hebcal_masechta)
-                    return {
-                        'masechta': alldaf_masechta,
-                        'daf': daf,
-                        'hebcal_name': hebcal_masechta
-                    }
+                    logger.info(f"Today's daf: {alldaf_masechta} {daf}")
+                    return {"masechta": alldaf_masechta, "daf": daf}
 
-        raise ValueError(f"Could not find Daf Yomi in Hebcal for {today_str}")
+        raise ValueError(f"No Daf Yomi found for {today_str}")
 
 
 async def get_jewish_history_video(masechta: str, daf: int) -> dict:
     """
-    Find the Jewish History in Daf Yomi video for a specific daf.
-    Returns dict with title, page URL, and direct video URL.
+    Find the Jewish History video for a specific daf.
+
+    Returns:
+        Dict with title, page_url, video_url, masechta, daf
     """
-    # Try the Jewish History series page with search
-    series_url = f"{ALLDAF_BASE_URL}/series/3940"
+    masechta_lower = masechta.lower()
 
-    async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-        response = await client.get(series_url)
+    async with httpx.AsyncClient(
+        follow_redirects=True, timeout=REQUEST_TIMEOUT
+    ) as client:
+        response = await client.get(ALLDAF_SERIES_URL)
         response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
 
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        # Normalize masechta name for comparison
-        masechta_lower = masechta.lower()
         page_url = None
         title = None
 
-        # Look for videos matching this masechta and daf
-        for link in soup.find_all('a', href=True):
-            link_text = link.get_text().strip()
-            link_text_lower = link_text.lower()
-            href = link['href']
-
-            if not href.startswith('/p/'):
+        for link in soup.find_all("a", href=True):
+            href = link["href"]
+            if not href.startswith("/p/"):
                 continue
 
-            # Check if this matches our masechta and daf
-            # Handle various formats: "Menachos 15", "Menachos Daf 15", etc.
-            if masechta_lower in link_text_lower:
-                # Check for daf number
-                daf_patterns = [
-                    f"{masechta_lower} {daf}",
-                    f"{masechta_lower} daf {daf}",
-                    f"{masechta_lower}{daf}",
-                ]
-                if any(p in link_text_lower for p in daf_patterns) or \
-                   re.search(rf'{masechta_lower}\s+{daf}\b', link_text_lower):
-                    page_url = f"{ALLDAF_BASE_URL}{href}"
-                    title = link_text
-                    break
+            link_text = link.get_text().strip()
+            link_text_lower = link_text.lower()
 
-        # If not found on series page, try the daf page directly
-        if not page_url:
-            daf_page_url = f"{ALLDAF_BASE_URL}/?masechta={masechta}&daf={daf}"
-            logger.info(f"Trying daf page: {daf_page_url}")
+            if masechta_lower not in link_text_lower:
+                continue
 
-            response = await client.get(daf_page_url)
-            response.raise_for_status()
+            # Check for daf number match
+            patterns = [
+                rf"\b{masechta_lower}\s+{daf}\b",
+                rf"\b{masechta_lower}\s+daf\s+{daf}\b",
+            ]
 
-            soup = BeautifulSoup(response.text, 'html.parser')
-
-            # Look for Jewish History video in supplemental clips
-            for link in soup.find_all('a', href=True):
-                href = link['href']
-                if not href.startswith('/p/'):
-                    continue
-
-                # Check parent context for Jewish History indicators
-                parent = link.find_parent(['div', 'li', 'section'])
-                if parent:
-                    parent_text = parent.get_text().lower()
-                    history_indicators = ('jewish history', 'abramson', 'henry')
-                    if any(ind in parent_text for ind in history_indicators):
-                        link_text = link.get_text().strip()
-                        if link_text and masechta_lower in link_text.lower():
-                            page_url = f"{ALLDAF_BASE_URL}{href}"
-                            title = link_text
-                            break
+            if any(re.search(p, link_text_lower) for p in patterns):
+                page_url = f"{ALLDAF_BASE_URL}{href}"
+                title = link_text
+                logger.info(f"Found video: {title}")
+                break
 
         if not page_url:
-            raise ValueError(
-                f"Could not find Jewish History video for {masechta} {daf}"
-            )
+            raise ValueError(f"Video not found for {masechta} {daf}")
 
-        # Now fetch the video page to get the direct MP4 URL
-        logger.info(f"Fetching video page: {page_url}")
+        # Fetch video page for MP4 URL
         response = await client.get(page_url)
         response.raise_for_status()
 
-        # Extract the JWPlayer video URL
         video_url = None
-
-        # Look for mp4 URL patterns
         mp4_pattern = (
-            r'https://(?:cdn\.jwplayer\.com|content\.jwplatform\.com)'
-            r'/videos/([a-zA-Z0-9]+)\.mp4'
+            r"https://(?:cdn\.jwplayer\.com|content\.jwplatform\.com)"
+            r"/videos/([a-zA-Z0-9]+)\.mp4"
         )
         mp4_match = re.search(mp4_pattern, response.text)
+
         if mp4_match:
             video_url = f"https://cdn.jwplayer.com/videos/{mp4_match.group(1)}.mp4"
-
-        if not video_url:
-            logger.warning("Could not find direct video URL, falling back to page URL")
+            logger.info(f"Found video URL: {video_url}")
+        else:
+            logger.warning("Could not find direct video URL")
 
         return {
-            'title': title,
-            'page_url': page_url,
-            'video_url': video_url,
-            'masechta': masechta,
-            'daf': daf
+            "title": title,
+            "page_url": page_url,
+            "video_url": video_url,
+            "masechta": masechta,
+            "daf": daf,
         }
 
 
-async def send_daily_video():
-    """
-    Main function to fetch and send the daily Jewish History video.
-    """
+async def send_daily_video() -> None:
+    """Fetch and send the daily Jewish History video."""
     try:
         logger.info("Starting daily video fetch...")
 
         # Get today's daf
-        daf_info = await get_todays_daf_info()
-        logger.info(f"Today's daf: {daf_info['masechta']} {daf_info['daf']}")
+        daf_info = await get_todays_daf()
 
         # Get the Jewish History video
-        video_info = await get_jewish_history_video(
-            daf_info['masechta'], daf_info['daf']
-        )
-        logger.info(f"Found video: {video_info['title']}")
+        video = await get_jewish_history_video(daf_info["masechta"], daf_info["daf"])
 
         # Format caption
         caption = (
             f"📚 *Today's Daf Yomi History*\n\n"
-            f"*{video_info['masechta']} {video_info['daf']}*\n"
-            f"{video_info['title']}\n\n"
-            f"[View on AllDaf.org]({video_info['page_url']})"
+            f"*{video['masechta']} {video['daf']}*\n"
+            f"{video['title']}\n\n"
+            f"[View on AllDaf.org]({video['page_url']})"
         )
 
         # Send via Telegram
         bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
-        if video_info.get('video_url'):
-            # Send the video directly embedded
-            logger.info(f"Sending video: {video_info['video_url']}")
+        if video.get("video_url"):
+            logger.info(f"Sending video: {video['video_url']}")
             await bot.send_video(
                 chat_id=TELEGRAM_CHAT_ID,
-                video=video_info['video_url'],
+                video=video["video_url"],
                 caption=caption,
-                parse_mode='Markdown',
-                supports_streaming=True
+                parse_mode="Markdown",
+                supports_streaming=True,
             )
         else:
-            # Fallback to sending a link if we couldn't get the video URL
             await bot.send_message(
                 chat_id=TELEGRAM_CHAT_ID,
                 text=caption,
-                parse_mode='Markdown',
-                disable_web_page_preview=False
+                parse_mode="Markdown",
+                disable_web_page_preview=False,
             )
 
         logger.info("Message sent successfully!")
 
     except Exception as e:
         logger.error(f"Error sending daily video: {e}")
-        # Try to notify about the error
         try:
             bot = Bot(token=TELEGRAM_BOT_TOKEN)
             await bot.send_message(
                 chat_id=TELEGRAM_CHAT_ID,
-                text=f"Error fetching today's Daf Yomi History video: {str(e)}"
+                text=f"Error fetching today's Daf Yomi History video: {e}",
             )
         except Exception:
             pass
 
 
-async def main():
-    """
-    Main entry point - sets up scheduler and runs the bot.
-    """
+async def main() -> None:
+    """Main entry point - sets up scheduler and runs the bot."""
     if not TELEGRAM_BOT_TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN environment variable not set")
     if not TELEGRAM_CHAT_ID:
         raise ValueError("TELEGRAM_CHAT_ID environment variable not set")
 
-    logger.info("Starting Daf Yomi History Bot...")
+    logger.info("Starting Daf Yomi History Bot (APScheduler mode)...")
 
     # Create scheduler
     scheduler = AsyncIOScheduler(timezone=ISRAEL_TZ)
@@ -288,22 +252,22 @@ async def main():
     scheduler.add_job(
         send_daily_video,
         CronTrigger(hour=6, minute=0, timezone=ISRAEL_TZ),
-        id='daily_daf_video',
-        name='Send daily Daf Yomi History video',
-        replace_existing=True
+        id="daily_daf_video",
+        name="Send daily Daf Yomi History video",
+        replace_existing=True,
     )
 
     scheduler.start()
     logger.info("Scheduler started. Daily video will be sent at 6:00 AM Israel time.")
 
-    # Keep the bot running
+    # Keep running
     try:
         while True:
-            await asyncio.sleep(3600)  # Sleep for an hour
+            await asyncio.sleep(3600)
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown()
         logger.info("Bot stopped.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())
