@@ -33,8 +33,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Paths
-STATE_DIR = Path(__file__).parent.parent / ".github" / "state"
+# Paths - use GITHUB_WORKSPACE if available, otherwise script-relative
+def get_repo_root() -> Path:
+    """Get the repository root directory."""
+    # In GitHub Actions, GITHUB_WORKSPACE is the repo root
+    workspace = os.environ.get("GITHUB_WORKSPACE")
+    if workspace:
+        return Path(workspace)
+    # Fallback: assume script is in {repo}/scripts/
+    return Path(__file__).parent.parent
+
+
+REPO_ROOT = get_repo_root()
+STATE_DIR = REPO_ROOT / ".github" / "state"
 STATE_FILE = STATE_DIR / "last_update_id.json"
 RATE_LIMIT_FILE = STATE_DIR / "rate_limits.json"
 
@@ -457,6 +468,12 @@ async def process_updates(api: TelegramAPI, state: StateManager) -> int:
 
 async def main() -> int:
     """Main entry point."""
+    logger.info("=" * 50)
+    logger.info("Daf Yomi History Bot - Poll Commands")
+    logger.info("=" * 50)
+    logger.info(f"State directory: {STATE_DIR}")
+    logger.info(f"State file: {STATE_FILE}")
+
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
         logger.error("TELEGRAM_BOT_TOKEN environment variable not set")
@@ -465,7 +482,16 @@ async def main() -> int:
     try:
         api = TelegramAPI(token)
         state = StateManager()
-        await process_updates(api, state)
+
+        last_id = state.get_last_update_id()
+        logger.info(f"Last update ID: {last_id or 'None (first run)'}")
+
+        processed = await process_updates(api, state)
+
+        new_last_id = state.get_last_update_id()
+        logger.info(f"New last update ID: {new_last_id}")
+        logger.info(f"Total commands processed: {processed}")
+        logger.info("Poll completed successfully")
         return 0
 
     except Exception as e:
