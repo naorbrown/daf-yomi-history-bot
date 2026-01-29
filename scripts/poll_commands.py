@@ -151,6 +151,33 @@ class TelegramAPI:
         self.token = token
         self.base_url = f"{TELEGRAM_API_BASE}{token}"
 
+    async def delete_webhook(self) -> bool:
+        """Delete any existing webhook to enable polling.
+
+        This must be called before getUpdates will work if a webhook was previously set.
+        It's safe to call even if no webhook is set.
+        """
+        logger.info("Deleting webhook to ensure polling works...")
+        try:
+            async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+                response = await client.post(
+                    f"{self.base_url}/deleteWebhook",
+                    json={"drop_pending_updates": False},
+                )
+                response.raise_for_status()
+                data = response.json()
+
+                if data.get("ok"):
+                    logger.info("Webhook deleted successfully (or no webhook was set)")
+                    return True
+                else:
+                    logger.warning(f"deleteWebhook response: {data}")
+                    return False
+        except Exception as e:
+            logger.error(f"Error deleting webhook: {type(e).__name__}: {e}")
+            # Don't fail completely - try polling anyway
+            return False
+
     async def get_updates(self, offset: Optional[int] = None) -> list[dict[str, Any]]:
         """Fetch new updates from Telegram using POST (matches node-telegram-bot-api)."""
         form_data: dict[str, Any] = {"timeout": 0, "limit": 100}
@@ -556,6 +583,10 @@ async def main() -> int:
     try:
         api = TelegramAPI(token)
         state = StateManager()
+
+        # Delete any existing webhook to ensure polling works
+        # This is idempotent - safe to call even if no webhook was set
+        await api.delete_webhook()
 
         last_id = state.get_last_update_id()
         logger.info(f"Last update ID: {last_id if last_id is not None else 'None (first run)'}")
