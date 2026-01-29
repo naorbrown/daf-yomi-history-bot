@@ -488,3 +488,108 @@ class TestInitializeState:
 
                     # State should remain None (not set)
                     assert state.get_last_update_id() is None
+
+
+class TestProcessUpdates:
+    """Tests for process_updates function."""
+
+    @pytest.mark.asyncio
+    async def test_offset_zero_uses_correct_value(self):
+        """Test that offset=0 uses offset=1 (not None)."""
+        from poll_commands import process_updates
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "state.json"
+            rate_file = Path(tmpdir) / "rate_limits.json"
+
+            # Set last_update_id to 0
+            state_file.write_text(json.dumps({"last_update_id": 0}))
+
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.STATE_FILE", state_file):
+                    with patch("poll_commands.RATE_LIMIT_FILE", rate_file):
+                        state = StateManager()
+
+                        # Mock API
+                        api = AsyncMock()
+                        api.get_updates.return_value = []
+
+                        await process_updates(api, state)
+
+                        # Should call with offset=1, not None
+                        api.get_updates.assert_called_once_with(1)
+
+    @pytest.mark.asyncio
+    async def test_offset_none_when_no_state(self):
+        """Test that offset=None when no state exists."""
+        from poll_commands import process_updates
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "state.json"
+            rate_file = Path(tmpdir) / "rate_limits.json"
+
+            # Don't create state file
+
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.STATE_FILE", state_file):
+                    with patch("poll_commands.RATE_LIMIT_FILE", rate_file):
+                        state = StateManager()
+
+                        # Mock API
+                        api = AsyncMock()
+                        api.get_updates.return_value = []
+
+                        await process_updates(api, state)
+
+                        # Should call with offset=None
+                        api.get_updates.assert_called_once_with(None)
+
+    @pytest.mark.asyncio
+    async def test_continues_on_command_error(self):
+        """Test that processing continues even if one command fails."""
+        from poll_commands import process_updates
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "state.json"
+            rate_file = Path(tmpdir) / "rate_limits.json"
+
+            state_file.write_text(json.dumps({"last_update_id": 100}))
+
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.STATE_FILE", state_file):
+                    with patch("poll_commands.RATE_LIMIT_FILE", rate_file):
+                        state = StateManager()
+
+                        # Mock API with updates
+                        api = AsyncMock()
+                        api.get_updates.return_value = [
+                            {
+                                "update_id": 101,
+                                "message": {
+                                    "text": "/start",
+                                    "chat": {"id": 123},
+                                    "from": {"id": 456},
+                                },
+                            },
+                            {
+                                "update_id": 102,
+                                "message": {
+                                    "text": "/help",
+                                    "chat": {"id": 789},
+                                    "from": {"id": 999},
+                                },
+                            },
+                        ]
+                        # First send_message fails, second succeeds
+                        api.send_message.side_effect = [
+                            RuntimeError("Network error"),
+                            {"ok": True},
+                        ]
+
+                        # Should not raise even though first command failed
+                        processed = await process_updates(api, state)
+
+                        # Both updates should be acknowledged (offset updated)
+                        assert state.get_last_update_id() == 102
+                        # Only one command successfully processed
+                        assert processed == 1
