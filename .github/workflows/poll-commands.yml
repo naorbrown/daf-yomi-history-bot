@@ -5,6 +5,12 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
+# Prevent concurrent runs - cancel any in-progress run when a new one starts
+# This prevents race conditions with state file updates
+concurrency:
+  group: poll-commands
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -28,10 +34,30 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-      - name: Commit state changes
+      - name: Commit and push state changes
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add .github/state/
-          git diff --staged --quiet || git commit -m "chore: update bot state [skip ci]"
-          git push
+
+          # Only commit if there are changes
+          if git diff --staged --quiet; then
+            echo "No state changes to commit"
+            exit 0
+          fi
+
+          git commit -m "chore: update bot state [skip ci]"
+
+          # Pull with rebase to handle any concurrent changes, then push
+          # Retry up to 3 times in case of conflicts
+          for i in 1 2 3; do
+            if git pull --rebase origin main && git push; then
+              echo "Successfully pushed state changes"
+              exit 0
+            fi
+            echo "Push attempt $i failed, retrying..."
+            sleep 2
+          done
+
+          echo "Failed to push after 3 attempts"
+          exit 1
