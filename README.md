@@ -9,95 +9,50 @@ A Telegram bot that delivers daily Jewish History videos from [AllDaf.org](https
 
 ---
 
-## 🚀 Start Using the Bot
-
-**Open Telegram and start chatting:**
+## Start Using the Bot
 
 1. **Open Telegram** on your phone or computer
 2. **Search for** `@DafHistoryBot`
 3. **Tap Start**
 
-That's it! You'll receive a daily video every morning at 6:00 AM Israel time.
+You'll receive a daily video every morning at 6:00 AM Israel time.
 
 > **Quick link:** [t.me/DafHistoryBot](https://t.me/DafHistoryBot)
 
 ---
 
-## 📱 Bot Commands
+## How It Works
 
-| Command | What It Does |
-|---------|--------------|
-| `/start` | Welcome message and instructions |
-| `/today` | Get today's Daf Yomi history video |
-| `/help` | Show all available commands |
-
----
-
-## ❓ FAQ
-
-### What is this bot?
-
-This bot sends you a short Jewish History video every day, matching the Daf Yomi learning schedule. The videos are from Dr. Henry Abramson's series on AllDaf.org.
-
-### When do I get videos?
-
-- **Automatically** every morning at 6:00 AM Israel time
-- **On-demand** anytime by sending `/today`
-
-### Is it free?
-
-Yes, completely free. No ads, no subscriptions, no catches.
-
-### Do I need to do anything after starting?
-
-No! Just tap Start once, and you'll receive videos automatically every day.
-
----
-
-## 🛠 For Developers
-
-Want to run your own instance? See the [Developer Guide](#developer-guide) below.
-
----
-
-## Developer Guide
-
-### Architecture
+This bot uses **GitHub Actions** to automatically send daily videos:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         DAF YOMI HISTORY BOT                            │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐  │
-│   │ GitHub Actions  │     │    Vercel       │     │   Telegram      │  │
-│   │ (Scheduled)     │     │ (Serverless)    │     │   Bot API       │  │
-│   └────────┬────────┘     └────────┬────────┘     └────────┬────────┘  │
-│            │                       │                       │           │
-│            ▼                       ▼                       │           │
-│   ┌─────────────────┐     ┌─────────────────┐              │           │
-│   │ Daily 6AM IST   │     │ Webhook Handler │◀─────────────┘           │
-│   │ send_video.py   │     │ api/webhook.py  │                          │
-│   └────────┬────────┘     └────────┬────────┘                          │
-│            │                       │                                    │
-│            └───────────┬───────────┘                                    │
-│                        ▼                                                │
-│            ┌─────────────────────┐                                      │
-│            │   External APIs     │                                      │
-│            │ • Hebcal (Daf info) │                                      │
-│            │ • AllDaf (Videos)   │                                      │
-│            └─────────────────────┘                                      │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    DAF YOMI HISTORY BOT                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   ┌─────────────────┐              ┌─────────────────┐         │
+│   │ GitHub Actions  │              │   Telegram      │         │
+│   │ (Daily 6AM IST) │─────────────▶│   Bot API       │         │
+│   └─────────────────┘              └─────────────────┘         │
+│            │                                                    │
+│            ▼                                                    │
+│   ┌─────────────────────────────────────────┐                  │
+│   │           External APIs                  │                  │
+│   │  • Hebcal (Daf Yomi schedule)           │                  │
+│   │  • AllDaf.org (Video content)           │                  │
+│   └─────────────────────────────────────────┘                  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Prerequisites
-
-- A Telegram account
-- A GitHub account
-- A Vercel account (free) - for interactive commands
+**Daily at 6:00 AM Israel time**, GitHub Actions:
+1. Fetches today's Daf from Hebcal API
+2. Finds the matching video on AllDaf.org
+3. Sends it to all subscribers via Telegram
 
 ---
+
+## For Developers
 
 ### Quick Setup (5 minutes)
 
@@ -131,37 +86,7 @@ Go to your fork → **Settings** → **Secrets and variables** → **Actions** �
 
 Go to **Actions** tab → Click **"I understand my workflows, go ahead and enable them"**
 
-✅ **Daily videos are now configured!** They'll send at 6:00 AM Israel time.
-
----
-
-### Enable Interactive Commands (Vercel Deployment)
-
-To make `/today`, `/start`, and `/help` work for any user:
-
-#### Step 1: Deploy to Vercel
-
-1. Go to [vercel.com](https://vercel.com) and sign up (free)
-2. Click **"Add New Project"**
-3. Import your forked GitHub repository
-4. Add environment variable:
-   - Name: `TELEGRAM_BOT_TOKEN`
-   - Value: Your bot token
-5. Click **Deploy**
-
-#### Step 2: Set Up Webhook
-
-After deployment, get your Vercel URL (e.g., `https://your-bot.vercel.app`)
-
-Run this command (replace the values):
-
-```bash
-curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=https://<YOUR_VERCEL_URL>/api/webhook"
-```
-
-You should see: `{"ok":true,"result":true,"description":"Webhook was set"}`
-
-✅ **Done!** Commands now work for all users instantly.
+✅ **Done!** Daily videos will send at 6:00 AM Israel time.
 
 ---
 
@@ -169,92 +94,91 @@ You should see: `{"ok":true,"result":true,"description":"Webhook was set"}`
 
 ```
 daf-yomi-history-bot/
-├── api/
-│   └── webhook.py          # Vercel serverless function (handles commands)
+├── send_video.py           # Main script - sends daily video
+├── bot.py                  # Interactive bot (for local testing)
+├── src/                    # Core modules
+│   ├── command_parser.py   # Command parsing utilities
+│   ├── rate_limiter.py     # Rate limiting (5 req/min/user)
+│   └── message_builder.py  # Message formatting
 ├── tests/
-│   └── test_bot.py         # Comprehensive test suite
-├── .github/
-│   └── workflows/
-│       ├── daily_video.yml # Scheduled daily video sender
-│       └── ci.yml          # CI/CD pipeline (tests, lint, security)
-├── send_video.py           # GitHub Actions video sender
-├── bot.py                  # Polling bot (alternative to webhook)
-├── vercel.json             # Vercel configuration
+│   ├── unit/               # Unit tests (pytest)
+│   └── test_bot.py         # Integration tests
+├── test_apis.py            # API integration test script
+├── .github/workflows/
+│   ├── daily_video.yml     # Daily 6AM video sender
+│   └── ci.yml              # CI/CD pipeline
+├── requirements.txt        # Python dependencies
 ├── README.md               # This file
 └── SECURITY.md             # Security documentation
 ```
 
 ---
 
-## 💰 Cost
-
-**Free. Forever.**
-
-| Service | Cost | Purpose |
-|---------|------|---------|
-| GitHub Actions | Free (public repos) | Daily scheduled videos |
-| Vercel | Free (hobby tier) | Interactive commands |
-| Hebcal API | Free | Daf Yomi schedule |
-| AllDaf.org | Free | Video content |
-| Telegram Bot API | Free | Message delivery |
-
----
-
-## 🔒 Security
-
-Production-grade security:
-
-- ✅ No stored credentials in code
-- ✅ Environment variables for secrets
-- ✅ HTTPS-only communication
-- ✅ Minimal dependencies
-- ✅ Automated security scanning in CI/CD
-- ✅ No database or persistent storage
-
-See [SECURITY.md](SECURITY.md) for detailed security architecture.
-
----
-
-## 🧪 Testing & QA
+## Testing
 
 ### Run Tests Locally
 
 ```bash
 # Install dependencies
-pip install httpx beautifulsoup4 python-telegram-bot pytest
+pip install -r requirements.txt
+pip install pytest pytest-cov pyyaml
 
-# Run tests
+# Run all tests
 pytest tests/ -v
 
 # Run with coverage
-pytest tests/ -v --cov=api
+pytest tests/ -v --cov=src --cov-report=term-missing
+
+# Run API integration tests
+python test_apis.py
 ```
+
+### Test Coverage
+
+| Module | Tests | Coverage |
+|--------|-------|----------|
+| `command_parser` | 25 tests | Command parsing, bot mentions, edge cases |
+| `rate_limiter` | 14 tests | Rate limiting, per-user tracking |
+| `message_builder` | 23 tests | Message formatting, video captions |
+| `integration` | 17 tests | Workflow validation, file checks |
 
 ### CI/CD Pipeline
 
 Every push and PR automatically runs:
 
-1. **Unit Tests** - Verify bot logic
-2. **Integration Tests** - Test external API connections
-3. **Linting** - Code quality checks
-4. **Security Scan** - Dependency vulnerability check
-5. **Validation** - Config file verification
+1. **Unit Tests** - All modules tested with pytest
+2. **Integration Tests** - API connectivity checks
+3. **Linting** - Code quality (Ruff)
+4. **Security Scan** - Dependency vulnerabilities
+5. **Validation** - Workflow and config verification
 
 ---
 
-## 🐛 Troubleshooting
+## Cost
+
+**Free. Forever.**
+
+| Service | Cost |
+|---------|------|
+| GitHub Actions | Free (public repos) |
+| Hebcal API | Free |
+| AllDaf.org | Free |
+| Telegram Bot API | Free |
+
+---
+
+## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
-| Bot doesn't respond to commands | Deploy to Vercel and set up webhook |
 | Video not found | Video may not exist for today's daf - check [AllDaf](https://alldaf.org/series/3940) |
 | Wrong daf displayed | Bot uses Israel timezone - verify at [Hebcal](https://www.hebcal.com/sedrot) |
 | Daily video not sending | Check GitHub Actions logs in your fork |
-| Webhook not working | Verify URL with `curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo` |
+| Workflow failing | Run `pytest tests/ -v` locally to debug |
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -268,18 +192,17 @@ All PRs are automatically tested by CI/CD.
 
 ---
 
-## 📜 License
+## License
 
 MIT — see [LICENSE](LICENSE).
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [AllDaf.org](https://alldaf.org) & the Orthodox Union
 - [Dr. Henry Abramson](https://www.henryabramson.com/)
 - [Hebcal](https://www.hebcal.com/)
-- [Vercel](https://vercel.com/) for free serverless hosting
 
 ---
 
