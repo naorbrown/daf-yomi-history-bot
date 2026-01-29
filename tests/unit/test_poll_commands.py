@@ -496,15 +496,15 @@ class TestProcessUpdates:
                         api.get_updates.assert_called_once_with(1)
 
     @pytest.mark.asyncio
-    async def test_offset_none_when_no_state(self):
-        """Test that offset=None when no state exists."""
+    async def test_offset_one_when_no_state(self):
+        """Test that offset=1 when no state exists (nachyomi-bot pattern)."""
         from poll_commands import process_updates
 
         with tempfile.TemporaryDirectory() as tmpdir:
             state_file = Path(tmpdir) / "state.json"
             rate_file = Path(tmpdir) / "rate_limits.json"
 
-            # Don't create state file
+            # Don't create state file - simulates first run
 
             with patch("poll_commands.STATE_DIR", Path(tmpdir)):
                 with patch("poll_commands.STATE_FILE", state_file):
@@ -517,8 +517,10 @@ class TestProcessUpdates:
 
                         await process_updates(api, state)
 
-                        # Should call with offset=None
-                        api.get_updates.assert_called_once_with(None)
+                        # nachyomi-bot pattern: offset = lastUpdateId + 1
+                        # When no state exists, lastUpdateId defaults to 0
+                        # So offset = 0 + 1 = 1
+                        api.get_updates.assert_called_once_with(1)
 
     @pytest.mark.asyncio
     async def test_continues_on_command_error(self):

@@ -451,16 +451,26 @@ async def handle_command(
 
 async def process_updates(api: TelegramAPI, state: StateManager) -> int:
     """Process pending Telegram updates. Returns count of processed updates."""
+    # Load last update ID, default to 0 if not found (matches nachyomi-bot pattern)
     last_update_id = state.get_last_update_id()
-    offset = last_update_id + 1 if last_update_id is not None else None
+    if last_update_id is None:
+        last_update_id = 0
+        logger.info("No state file found, starting from offset 1")
+
+    # Always use offset = lastUpdateId + 1 (nachyomi-bot pattern)
+    offset = last_update_id + 1
+    logger.info(f"Fetching updates with offset={offset}")
 
     updates = await api.get_updates(offset)
     if not updates:
         logger.info("No new updates")
+        # Still save state to ensure file exists
+        state.set_last_update_id(last_update_id)
         return 0
 
     rate_limiter = RateLimiter(state)
     processed = 0
+    max_update_id = last_update_id
 
     for update in updates:
         update_id = update.get("update_id")
@@ -469,9 +479,12 @@ async def process_updates(api: TelegramAPI, state: StateManager) -> int:
         chat_id = message.get("chat", {}).get("id")
         user_id = message.get("from", {}).get("id")
 
+        # Track highest update_id seen
+        if update_id and update_id > max_update_id:
+            max_update_id = update_id
+
         if not chat_id or not user_id:
             logger.warning(f"Skipping update {update_id}: missing chat_id or user_id")
-            state.set_last_update_id(update_id)
             continue
 
         command = parse_command(text)
@@ -484,8 +497,10 @@ async def process_updates(api: TelegramAPI, state: StateManager) -> int:
                 logger.error(f"Failed to handle command /{command} for user {user_id}: {e}")
                 # Continue processing other updates even if one fails
 
-        # Always update the offset, even for non-command messages or failed commands
-        state.set_last_update_id(update_id)
+    # Save highest update_id AFTER processing all updates (nachyomi-bot pattern)
+    if max_update_id > last_update_id:
+        state.set_last_update_id(max_update_id)
+        logger.info(f"Saved last_update_id={max_update_id}")
 
     logger.info(f"Processed {processed} command(s) from {len(updates)} update(s)")
     return processed
@@ -527,11 +542,8 @@ async def main() -> int:
         api = TelegramAPI(token)
         state = StateManager()
 
-        # Initialize state on first run (prevents processing old stale messages)
-        await initialize_state_if_needed(api, state)
-
         last_id = state.get_last_update_id()
-        logger.info(f"Last update ID: {last_id or 'None (first run)'}")
+        logger.info(f"Last update ID: {last_id if last_id is not None else 'None (first run)'}")
 
         processed = await process_updates(api, state)
 
