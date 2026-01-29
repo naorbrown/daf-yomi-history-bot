@@ -532,11 +532,16 @@ async def main() -> int:
     logger.info("=" * 50)
     logger.info(f"State directory: {STATE_DIR}")
     logger.info(f"State file: {STATE_FILE}")
+    logger.info(f"State directory exists: {STATE_DIR.exists()}")
 
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
-        logger.error("TELEGRAM_BOT_TOKEN environment variable not set")
+        logger.error("TELEGRAM_BOT_TOKEN environment variable not set!")
+        logger.error("Please add TELEGRAM_BOT_TOKEN to your repository secrets.")
         return 1
+
+    # Log token presence (not the actual token)
+    logger.info(f"TELEGRAM_BOT_TOKEN is set (length: {len(token)})")
 
     try:
         api = TelegramAPI(token)
