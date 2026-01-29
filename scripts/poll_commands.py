@@ -356,46 +356,124 @@ async def get_todays_daf() -> DafInfo:
         raise ValueError(f"No Daf Yomi found for {today_str}")
 
 
+def _match_video_title(link_text: str, masechta: str, daf_num: int) -> bool:
+    """
+    Check if a link text matches the specified masechta and daf number.
+
+    Uses multiple patterns to handle various title formats:
+    - "Berachos 2"
+    - "Berachos Daf 2"
+    - "Berachos 2 - Some Title"
+    - "Jewish History Berachos 2"
+    - etc.
+
+    Returns True if the title matches, False otherwise.
+    """
+    masechta_lower = masechta.lower()
+    link_text_lower = link_text.lower()
+
+    # Quick check: both masechta and daf number must be present
+    if masechta_lower not in link_text_lower:
+        return False
+
+    # Check if the daf number appears as a standalone number (not part of larger number)
+    # Using word boundary \b to prevent "2" matching "22"
+    daf_patterns = [
+        # Standard patterns
+        rf"{re.escape(masechta_lower)}\s+{daf_num}\b",  # "berachos 2"
+        rf"{re.escape(masechta_lower)}\s+daf\s+{daf_num}\b",  # "berachos daf 2"
+        rf"{re.escape(masechta_lower)}\s+-\s+{daf_num}\b",  # "berachos - 2"
+        rf"{re.escape(masechta_lower)}\s*:\s*{daf_num}\b",  # "berachos: 2"
+        # Patterns with daf number before description
+        rf"{re.escape(masechta_lower)}\s+{daf_num}\s*[-:]",  # "berachos 2 -" or "berachos 2:"
+        rf"{re.escape(masechta_lower)}\s+{daf_num}$",  # "berachos 2" at end
+        # Flexible: masechta anywhere, then daf number with word boundary
+        rf"\b{re.escape(masechta_lower)}\b.*\b{daf_num}\b",
+    ]
+
+    for pattern in daf_patterns:
+        if re.search(pattern, link_text_lower):
+            return True
+
+    return False
+
+
 async def get_jewish_history_video(daf: DafInfo) -> VideoInfo:
     """Find the Jewish History video for a specific daf."""
     masechta_lower = daf.masechta.lower()
+    logger.info(f"[AllDaf] Searching for {daf.masechta} {daf.daf} (lowercase: {masechta_lower})")
 
     async with httpx.AsyncClient(
         follow_redirects=True, timeout=REQUEST_TIMEOUT
     ) as client:
+        logger.info(f"[AllDaf] Fetching series page: {ALLDAF_SERIES_URL}")
         response = await client.get(ALLDAF_SERIES_URL)
         response.raise_for_status()
+        logger.info(f"[AllDaf] Got response: {response.status_code}, {len(response.text)} bytes")
+
         soup = BeautifulSoup(response.text, "html.parser")
 
         page_url = None
         title = None
+        candidates_found = []
 
-        for link in soup.find_all("a", href=True):
+        # Look for video links - try multiple selectors
+        all_links = soup.find_all("a", href=True)
+
+        # Filter to video page links (could be /p/, /page/, /video/, etc.)
+        video_links = []
+        for link in all_links:
             href = link["href"]
-            if not href.startswith("/p/"):
+            # Accept various URL patterns that might indicate video pages
+            if any(href.startswith(prefix) for prefix in ["/p/", "/page/", "/video/", "/watch/"]):
+                video_links.append(link)
+            # Also accept full URLs to the same domain
+            elif href.startswith(ALLDAF_BASE_URL):
+                video_links.append(link)
+
+        logger.info(f"[AllDaf] Found {len(video_links)} potential video links (out of {len(all_links)} total)")
+
+        # If no video links found with specific prefixes, fall back to all links
+        if not video_links:
+            logger.warning("[AllDaf] No video links found with standard prefixes, checking all links")
+            video_links = all_links
+
+        for link in video_links:
+            href = link["href"]
+            link_text = link.get_text().strip()
+
+            if not link_text:
                 continue
 
-            link_text = link.get_text().strip()
             link_text_lower = link_text.lower()
 
+            # Quick check: masechta name must be present
             if masechta_lower not in link_text_lower:
                 continue
 
-            # Check for daf number match with word boundary to avoid partial matches
-            # e.g., "Sanhedrin 2" should NOT match "Sanhedrin 22"
-            # All patterns use regex with \b word boundary at the end
-            patterns = [
-                rf"{re.escape(masechta_lower)}\s+{daf.daf}\b",  # "masechta N"
-                rf"{re.escape(masechta_lower)}\s+daf\s+{daf.daf}\b",  # "masechta daf N"
-            ]
+            # Track candidates for debugging
+            candidates_found.append(link_text[:80])
 
-            if any(re.search(p, link_text_lower) for p in patterns):
-                page_url = f"{ALLDAF_BASE_URL}{href}"
+            # Use the flexible matching function
+            if _match_video_title(link_text, daf.masechta, daf.daf):
+                # Construct full URL
+                if href.startswith("http"):
+                    page_url = href
+                else:
+                    page_url = f"{ALLDAF_BASE_URL}{href}"
                 title = link_text
-                logger.info(f"Found video: {title}")
+                logger.info(f"[AllDaf] Found matching video: {title}")
+                logger.info(f"[AllDaf] Video URL: {page_url}")
                 break
 
         if not page_url:
+            logger.error(f"[AllDaf] No match found for {daf.masechta} {daf.daf}")
+            if candidates_found:
+                logger.error(f"[AllDaf] Candidates containing '{masechta_lower}':")
+                for candidate in candidates_found[:10]:
+                    logger.error(f"[AllDaf]   - {candidate}")
+            else:
+                logger.error(f"[AllDaf] No links containing '{masechta_lower}' were found")
             raise ValueError(f"Video not found for {daf.masechta} {daf.daf}")
 
         # Fetch video page for MP4 URL
@@ -462,9 +540,37 @@ async def handle_command(
 
     elif command == "today":
         try:
-            daf = await get_todays_daf()
-            video = await get_jewish_history_video(daf)
+            # Step 1: Get today's daf from Hebcal
+            logger.info(f"[/today] Step 1: Fetching today's daf for user {user_id}")
+            try:
+                daf = await get_todays_daf()
+                logger.info(f"[/today] Got daf: {daf.masechta} {daf.daf}")
+            except Exception as e:
+                logger.error(f"[/today] Failed to get daf from Hebcal: {type(e).__name__}: {e}")
+                await api.send_message(
+                    chat_id,
+                    f"Sorry, I couldn't determine today's Daf Yomi. Please try again later.\n\nError: {type(e).__name__}"
+                )
+                return
 
+            # Step 2: Find video on AllDaf
+            logger.info(f"[/today] Step 2: Finding video for {daf.masechta} {daf.daf}")
+            try:
+                video = await get_jewish_history_video(daf)
+                logger.info(f"[/today] Found video: {video.title}")
+                logger.info(f"[/today] Page URL: {video.page_url}")
+                logger.info(f"[/today] Video URL: {video.video_url or 'None'}")
+            except Exception as e:
+                logger.error(f"[/today] Failed to find video: {type(e).__name__}: {e}")
+                await api.send_message(
+                    chat_id,
+                    f"Today's daf is {daf.masechta} {daf.daf}, but I couldn't find the video.\n\n"
+                    f"You can search for it directly on AllDaf.org:\n"
+                    f"https://alldaf.org/series/3940"
+                )
+                return
+
+            # Step 3: Build caption
             caption = (
                 f"Today's Daf Yomi History\n\n"
                 f"{video.masechta} {video.daf}\n"
@@ -472,16 +578,27 @@ async def handle_command(
                 f"View on AllDaf.org: {video.page_url}"
             )
 
+            # Step 4: Send video or message
+            logger.info(f"[/today] Step 3: Sending to user {user_id}")
             if video.video_url:
-                await api.send_video(chat_id, video.video_url, caption)
+                try:
+                    await api.send_video(chat_id, video.video_url, caption)
+                    logger.info(f"[/today] Video sent successfully to user {user_id}")
+                except Exception as e:
+                    logger.error(f"[/today] Failed to send video, trying text: {type(e).__name__}: {e}")
+                    # Fallback to text message if video fails
+                    await api.send_message(chat_id, caption)
+                    logger.info(f"[/today] Sent text message instead to user {user_id}")
             else:
                 await api.send_message(chat_id, caption)
-
-            logger.info(f"Sent video to user {user_id}: {video.title}")
+                logger.info(f"[/today] Sent text message to user {user_id} (no video URL)")
 
         except Exception as e:
-            logger.error(f"Error fetching video: {e}")
-            await api.send_message(chat_id, ERROR_MESSAGE)
+            logger.exception(f"[/today] Unexpected error for user {user_id}: {e}")
+            try:
+                await api.send_message(chat_id, ERROR_MESSAGE)
+            except Exception as send_error:
+                logger.error(f"[/today] Failed to send error message: {send_error}")
 
     else:
         # Unknown command - ignore silently

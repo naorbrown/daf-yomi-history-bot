@@ -29,6 +29,7 @@ from poll_commands import (
     handle_command,
     process_updates,
     main,
+    _match_video_title,
     WELCOME_MESSAGE,
     HELP_MESSAGE,
     ERROR_MESSAGE,
@@ -448,7 +449,9 @@ class TestHandleTodayCommand:
                             api.send_message.assert_called_once()
                             call_args = api.send_message.call_args
                             assert call_args[0][0] == 123  # chat_id
-                            assert "couldn't find" in call_args[0][1].lower()
+                            # Check for either old or new error message format
+                            msg = call_args[0][1].lower()
+                            assert "couldn't" in msg or "sorry" in msg
 
 
 # =============================================================================
@@ -626,8 +629,68 @@ class TestMainFunction:
 # TEST: VIDEO MATCHING PATTERNS
 # =============================================================================
 
+class TestVideoTitleMatching:
+    """Tests for the _match_video_title function directly."""
+
+    def test_simple_format(self):
+        """Test 'Masechta N' format."""
+        assert _match_video_title("Sanhedrin 2", "Sanhedrin", 2) is True
+
+    def test_with_daf_keyword(self):
+        """Test 'Masechta Daf N' format."""
+        assert _match_video_title("Sanhedrin Daf 2", "Sanhedrin", 2) is True
+
+    def test_with_description(self):
+        """Test 'Masechta N - Description' format."""
+        assert _match_video_title("Sanhedrin 2 - Courts and Justice", "Sanhedrin", 2) is True
+
+    def test_case_insensitive(self):
+        """Test case-insensitive matching."""
+        assert _match_video_title("SANHEDRIN 2", "Sanhedrin", 2) is True
+        assert _match_video_title("sanhedrin 2", "Sanhedrin", 2) is True
+
+    def test_no_match_wrong_daf(self):
+        """Test no match for wrong daf number."""
+        assert _match_video_title("Sanhedrin 3", "Sanhedrin", 2) is False
+
+    def test_no_match_partial_number(self):
+        """Test no match when daf is part of larger number."""
+        assert _match_video_title("Sanhedrin 22", "Sanhedrin", 2) is False
+        assert _match_video_title("Sanhedrin 12", "Sanhedrin", 2) is False
+        assert _match_video_title("Sanhedrin 20", "Sanhedrin", 2) is False
+
+    def test_with_colon_separator(self):
+        """Test 'Masechta: N' format."""
+        assert _match_video_title("Sanhedrin: 2", "Sanhedrin", 2) is True
+
+    def test_with_dash_separator(self):
+        """Test 'Masechta - N' format."""
+        assert _match_video_title("Sanhedrin - 2", "Sanhedrin", 2) is True
+
+    def test_daf_at_end(self):
+        """Test when daf number is at end of string."""
+        assert _match_video_title("Jewish History Sanhedrin 2", "Sanhedrin", 2) is True
+
+    def test_complex_title(self):
+        """Test complex real-world title formats."""
+        assert _match_video_title("Dr. Abramson - Sanhedrin 2 - Courts", "Sanhedrin", 2) is True
+        assert _match_video_title("Jewish History: Sanhedrin 2", "Sanhedrin", 2) is True
+
+    def test_masechta_not_present(self):
+        """Test returns False when masechta is not in title."""
+        assert _match_video_title("Berachos 2", "Sanhedrin", 2) is False
+
+    def test_number_only_no_masechta(self):
+        """Test returns False when only number is present."""
+        assert _match_video_title("Video 2", "Sanhedrin", 2) is False
+
+    def test_berachos_conversion(self):
+        """Test with converted masechta name."""
+        assert _match_video_title("Berachos 15 - Medieval Era", "Berachos", 15) is True
+
+
 class TestVideoMatchingPatterns:
-    """Tests for video title matching logic."""
+    """Tests for video title matching logic in full scraping context."""
 
     @pytest.mark.asyncio
     async def test_match_simple_format(self):
