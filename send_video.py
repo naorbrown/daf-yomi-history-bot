@@ -333,7 +333,7 @@ async def send_to_telegram(video: VideoInfo, bot_token: str, chat_id: str) -> No
 
     try:
         if video.video_url:
-            logger.info("Sending embedded video...")
+            logger.info(f"Sending embedded video to {chat_id}...")
             await bot.send_video(
                 chat_id=chat_id,
                 video=video.video_url,
@@ -342,7 +342,7 @@ async def send_to_telegram(video: VideoInfo, bot_token: str, chat_id: str) -> No
                 supports_streaming=True,
             )
         else:
-            logger.info("Sending link (no direct video URL available)...")
+            logger.info(f"Sending link to {chat_id} (no direct video URL available)...")
             await bot.send_message(
                 chat_id=chat_id,
                 text=caption,
@@ -350,16 +350,47 @@ async def send_to_telegram(video: VideoInfo, bot_token: str, chat_id: str) -> No
                 disable_web_page_preview=False,
             )
 
-        logger.info("Message sent successfully!")
+        logger.info(f"Message sent successfully to {chat_id}!")
 
     except TelegramError as e:
-        logger.error(f"Failed to send Telegram message: {e}")
+        logger.error(f"Failed to send Telegram message to {chat_id}: {e}")
         raise
+
+
+async def send_to_channel(video: VideoInfo) -> bool:
+    """
+    Send the video to the Torah Yomi channel if enabled.
+
+    Returns:
+        True if sent successfully, False if disabled or failed
+    """
+    channel_id = os.environ.get("TORAH_YOMI_CHANNEL_ID")
+    channel_token = os.environ.get("TORAH_YOMI_CHANNEL_BOT_TOKEN")
+    publish_enabled = os.environ.get("TORAH_YOMI_PUBLISH_ENABLED", "").lower() == "true"
+
+    if not publish_enabled:
+        logger.info("Channel publishing is disabled (TORAH_YOMI_PUBLISH_ENABLED != true)")
+        return False
+
+    if not channel_id or not channel_token:
+        logger.warning("Channel credentials not configured (TORAH_YOMI_CHANNEL_ID or TORAH_YOMI_CHANNEL_BOT_TOKEN missing)")
+        return False
+
+    try:
+        await send_to_telegram(video, channel_token, channel_id)
+        logger.info(f"Successfully published to channel {channel_id}")
+        return True
+    except TelegramError as e:
+        logger.error(f"Failed to publish to channel: {e}")
+        return False
 
 
 async def main() -> int:
     """
     Main entry point.
+
+    Sends to both the channel (if enabled) and the individual chat.
+    Avoids duplicates if both point to the same destination.
 
     Returns:
         Exit code (0 for success, 1 for failure)
@@ -372,9 +403,6 @@ async def main() -> int:
             logger.info("Outside send window - skipping to prevent duplicate sends")
             return 0
 
-        # Get configuration
-        bot_token, chat_id = get_config()
-
         # Get today's daf
         daf = await get_todays_daf()
 
@@ -382,9 +410,34 @@ async def main() -> int:
         video = await get_jewish_history_video(daf)
         logger.info(f"Found video: {video.title}")
 
-        # Send to Telegram
-        await send_to_telegram(video, bot_token, chat_id)
+        # Track where we've sent to avoid duplicates
+        sent_to: set[str] = set()
 
+        # 1. Send to channel first (if enabled)
+        channel_id = os.environ.get("TORAH_YOMI_CHANNEL_ID")
+        if await send_to_channel(video):
+            sent_to.add(channel_id)
+            logger.info(f"Sent to channel: {channel_id}")
+
+        # 2. Send to individual chat (if configured and not already sent)
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+
+        if bot_token and chat_id:
+            if chat_id in sent_to:
+                logger.info(f"Skipping {chat_id} - already sent to this destination")
+            else:
+                await send_to_telegram(video, bot_token, chat_id)
+                sent_to.add(chat_id)
+                logger.info(f"Sent to chat: {chat_id}")
+        else:
+            logger.info("Individual chat not configured (TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID missing)")
+
+        if not sent_to:
+            logger.warning("No destinations configured - video was not sent anywhere")
+            return 1
+
+        logger.info(f"Successfully sent video to {len(sent_to)} destination(s)")
         return 0
 
     except DafYomiError as e:
