@@ -346,10 +346,10 @@ async def send_to_telegram(video: VideoInfo, bot_token: str, chat_id: str) -> No
         TelegramError: If sending fails
     """
     caption = (
-        f"📚 *Today's Daf Yomi History*\n\n"
-        f"*{video.masechta} {video.daf}*\n"
+        f"Daily Daf Yomi History\n\n"
+        f"{video.masechta} {video.daf}\n"
         f"{video.title}\n\n"
-        f"[View on AllDaf.org]({video.page_url})"
+        f"{video.page_url}"
     )
 
     bot = Bot(token=bot_token)
@@ -361,7 +361,6 @@ async def send_to_telegram(video: VideoInfo, bot_token: str, chat_id: str) -> No
                 chat_id=chat_id,
                 video=video.video_url,
                 caption=caption,
-                parse_mode="Markdown",
                 supports_streaming=True,
             )
         else:
@@ -369,7 +368,6 @@ async def send_to_telegram(video: VideoInfo, bot_token: str, chat_id: str) -> No
             await bot.send_message(
                 chat_id=chat_id,
                 text=caption,
-                parse_mode="Markdown",
                 disable_web_page_preview=False,
             )
 
