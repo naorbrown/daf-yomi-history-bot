@@ -92,9 +92,10 @@ MASECHTA_NAME_MAP: dict[str, str] = {
 # Bot messages (plain text - no Markdown to avoid parsing issues)
 WELCOME_MESSAGE = """Welcome to Daf Yomi History Bot!
 
-Get daily Jewish History videos by Dr. Henry Abramson, matching the Daf Yomi schedule.
+You're now subscribed to daily Jewish History videos by Dr. Henry Abramson, matching the Daf Yomi schedule.
 
-Use /today anytime to get today's video."""
+Daily broadcast: 6:00 AM Israel time
+On-demand: Use /today anytime"""
 
 ERROR_MESSAGE = """Sorry, I couldn't find today's video. Please try again later.
 
