@@ -50,6 +50,7 @@ STATE_DIR = REPO_ROOT / ".github" / "state"
 STATE_FILE = STATE_DIR / "last_update_id.json"
 RATE_LIMIT_FILE = STATE_DIR / "rate_limits.json"
 VIDEO_CACHE_FILE = STATE_DIR / "video_cache.json"
+SUBSCRIBERS_FILE = STATE_DIR / "subscribers.json"
 
 # Constants
 ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
@@ -295,6 +296,26 @@ class StateManager:
         VIDEO_CACHE_FILE.write_text(json.dumps(video_info, indent=2))
         logger.info(f"Cached video info for date {video_info.get('date')}")
 
+    def get_subscribers(self) -> list[int]:
+        """Get list of subscriber chat IDs."""
+        if SUBSCRIBERS_FILE.exists():
+            try:
+                data = json.loads(SUBSCRIBERS_FILE.read_text())
+                return data.get("chat_ids", [])
+            except json.JSONDecodeError:
+                return []
+        return []
+
+    def add_subscriber(self, chat_id: int) -> bool:
+        """Add a subscriber. Returns True if newly added, False if already subscribed."""
+        subscribers = self.get_subscribers()
+        if chat_id in subscribers:
+            return False
+        subscribers.append(chat_id)
+        SUBSCRIBERS_FILE.write_text(json.dumps({"chat_ids": subscribers}, indent=2))
+        logger.info(f"Added subscriber: {chat_id} (total: {len(subscribers)})")
+        return True
+
 
 class RateLimiter:
     """Per-user rate limiting."""
@@ -532,10 +553,12 @@ async def handle_command(
         return
 
     if command == "start":
+        # Register subscriber for daily broadcasts
+        is_new = state.add_subscriber(chat_id)
         # Send welcome message, then today's video
         await api.send_message(chat_id, WELCOME_MESSAGE)
         await send_todays_video(api, chat_id, state, user_id)
-        logger.info(f"Sent welcome + video to user {user_id}")
+        logger.info(f"Sent welcome + video to user {user_id} (new subscriber: {is_new})")
 
     elif command in ("today", "help"):
         # /today and /help both send today's video

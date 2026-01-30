@@ -225,6 +225,54 @@ class TestStateManager:
                     assert saved_data["title"] == "Test Video"
 
 
+class TestSubscribers:
+    """Tests for subscriber management."""
+
+    def test_get_subscribers_no_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.SUBSCRIBERS_FILE", Path(tmpdir) / "subscribers.json"):
+                    state = StateManager()
+                    assert state.get_subscribers() == []
+
+    def test_add_subscriber_new(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            subs_file = Path(tmpdir) / "subscribers.json"
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.SUBSCRIBERS_FILE", subs_file):
+                    state = StateManager()
+                    is_new = state.add_subscriber(123456)
+                    assert is_new is True
+                    assert 123456 in state.get_subscribers()
+
+    def test_add_subscriber_duplicate(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            subs_file = Path(tmpdir) / "subscribers.json"
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.SUBSCRIBERS_FILE", subs_file):
+                    state = StateManager()
+                    state.add_subscriber(123456)
+                    is_new = state.add_subscriber(123456)
+                    assert is_new is False
+                    # Should only have one entry
+                    assert state.get_subscribers().count(123456) == 1
+
+    def test_multiple_subscribers(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            subs_file = Path(tmpdir) / "subscribers.json"
+            with patch("poll_commands.STATE_DIR", Path(tmpdir)):
+                with patch("poll_commands.SUBSCRIBERS_FILE", subs_file):
+                    state = StateManager()
+                    state.add_subscriber(111)
+                    state.add_subscriber(222)
+                    state.add_subscriber(333)
+                    subs = state.get_subscribers()
+                    assert len(subs) == 3
+                    assert 111 in subs
+                    assert 222 in subs
+                    assert 333 in subs
+
+
 class TestRateLimiter:
     """Tests for RateLimiter class."""
 
