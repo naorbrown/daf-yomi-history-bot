@@ -12,12 +12,14 @@ It includes a time window check to prevent duplicate sends from DST cron jobs.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -142,25 +144,44 @@ def is_within_send_window() -> bool:
     return is_within
 
 
-def get_config() -> tuple[str, str]:
+def get_config() -> tuple[str, Optional[str]]:
     """
     Get configuration from environment variables.
 
     Returns:
-        Tuple of (bot_token, chat_id)
+        Tuple of (bot_token, chat_id) - chat_id may be None if using subscribers only
 
     Raises:
-        ValueError: If required environment variables are not set
+        ValueError: If bot token is not set
     """
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
 
     if not bot_token:
         raise ValueError("TELEGRAM_BOT_TOKEN environment variable is not set")
-    if not chat_id:
-        raise ValueError("TELEGRAM_CHAT_ID environment variable is not set")
 
     return bot_token, chat_id
+
+
+def get_subscribers() -> list[int]:
+    """
+    Get list of subscriber chat IDs from state file.
+
+    Returns:
+        List of chat IDs
+    """
+    # Path relative to repo root
+    workspace = os.environ.get("GITHUB_WORKSPACE", ".")
+    subscribers_file = Path(workspace) / ".github" / "state" / "subscribers.json"
+
+    if subscribers_file.exists():
+        try:
+            data = json.loads(subscribers_file.read_text())
+            return data.get("chat_ids", [])
+        except (json.JSONDecodeError, KeyError):
+            logger.warning("Failed to read subscribers file")
+            return []
+    return []
 
 
 def convert_masechta_name(hebcal_name: str) -> str:
@@ -389,6 +410,38 @@ async def send_to_unified_channel(video: VideoInfo) -> None:
         logger.error(f"Failed to publish to unified channel: {e}")
 
 
+async def broadcast_to_subscribers(video: VideoInfo, bot_token: str) -> tuple[int, int]:
+    """
+    Broadcast video to all subscribers.
+
+    Args:
+        video: VideoInfo with video details
+        bot_token: Telegram bot token
+
+    Returns:
+        Tuple of (success_count, failure_count)
+    """
+    subscribers = get_subscribers()
+    if not subscribers:
+        logger.info("No subscribers to broadcast to")
+        return 0, 0
+
+    logger.info(f"Broadcasting to {len(subscribers)} subscribers...")
+    success = 0
+    failed = 0
+
+    for chat_id in subscribers:
+        try:
+            await send_to_telegram(video, bot_token, str(chat_id))
+            success += 1
+        except Exception as e:
+            logger.error(f"Failed to send to {chat_id}: {e}")
+            failed += 1
+
+    logger.info(f"Broadcast complete: {success} succeeded, {failed} failed")
+    return success, failed
+
+
 async def main() -> int:
     """
     Main entry point.
@@ -414,8 +467,12 @@ async def main() -> int:
         video = await get_jewish_history_video(daf)
         logger.info(f"Found video: {video.title}")
 
-        # Send to Telegram
-        await send_to_telegram(video, bot_token, chat_id)
+        # Send to main chat ID (if configured) for backwards compatibility
+        if chat_id:
+            await send_to_telegram(video, bot_token, chat_id)
+
+        # Broadcast to all subscribers
+        await broadcast_to_subscribers(video, bot_token)
 
         # Send to unified Torah Yomi channel
         await send_to_unified_channel(video)
