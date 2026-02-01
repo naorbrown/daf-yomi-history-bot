@@ -44,11 +44,14 @@ ALLDAF_SERIES_URL = f"{ALLDAF_BASE_URL}/series/3940"
 HEBCAL_API_URL = "https://www.hebcal.com/hebcal"
 REQUEST_TIMEOUT = 30.0
 
-# Time window for sending (to prevent duplicates from DST cron jobs)
-# Only send if Israel time is between 5:45 AM and 6:30 AM
+# Time window for sending (to handle GitHub Actions cron delays)
+# Widened window with proper deduplication via state file
 SEND_HOUR = 6
-SEND_WINDOW_MINUTES_BEFORE = 15  # 5:45 AM
-SEND_WINDOW_MINUTES_AFTER = 30  # 6:30 AM
+SEND_WINDOW_MINUTES_BEFORE = 60  # 5:00 AM
+SEND_WINDOW_MINUTES_AFTER = 120  # 8:00 AM
+
+# State file for tracking last broadcast date
+LAST_BROADCAST_FILE = ".github/state/last_broadcast.json"
 
 # Masechta name mapping: Hebcal uses different transliterations than AllDaf
 MASECHTA_NAME_MAP: dict[str, str] = {
@@ -195,6 +198,60 @@ def convert_masechta_name(hebcal_name: str) -> str:
         Masechta name in AllDaf format
     """
     return MASECHTA_NAME_MAP.get(hebcal_name, hebcal_name)
+
+
+def get_last_broadcast_date() -> Optional[str]:
+    """
+    Get the last broadcast date from state file.
+
+    Returns:
+        Date string (YYYY-MM-DD) or None if not found
+    """
+    workspace = os.environ.get("GITHUB_WORKSPACE", ".")
+    broadcast_file = Path(workspace) / LAST_BROADCAST_FILE
+
+    if broadcast_file.exists():
+        try:
+            data = json.loads(broadcast_file.read_text())
+            return data.get("date")
+        except (json.JSONDecodeError, KeyError):
+            logger.warning("Failed to read last broadcast file")
+            return None
+    return None
+
+
+def save_last_broadcast_date(date_str: str) -> None:
+    """
+    Save the last broadcast date to state file.
+
+    Args:
+        date_str: Date string (YYYY-MM-DD) to save
+    """
+    workspace = os.environ.get("GITHUB_WORKSPACE", ".")
+    broadcast_file = Path(workspace) / LAST_BROADCAST_FILE
+
+    # Ensure directory exists
+    broadcast_file.parent.mkdir(parents=True, exist_ok=True)
+
+    broadcast_file.write_text(json.dumps({"date": date_str}, indent=2))
+    logger.info(f"Saved last broadcast date: {date_str}")
+
+
+def has_already_broadcast_today() -> bool:
+    """
+    Check if we've already broadcast today.
+
+    Returns:
+        True if already broadcast today, False otherwise
+    """
+    israel_now = datetime.now(ISRAEL_TZ)
+    today_str = israel_now.strftime("%Y-%m-%d")
+
+    last_broadcast = get_last_broadcast_date()
+    if last_broadcast == today_str:
+        logger.info(f"Already broadcast today ({today_str})")
+        return True
+    return False
 
 
 async def get_todays_daf() -> DafInfo:
@@ -448,11 +505,15 @@ async def main() -> int:
         Exit code (0 for success, 1 for failure)
     """
     try:
-        # Check if we're within the send window (prevents duplicates from DST cron jobs)
-        # Skip SKIP_TIME_CHECK for manual testing or webhook triggers
+        # Check if we're within the send window (prevents running at wrong time)
         skip_time_check = os.environ.get("SKIP_TIME_CHECK", "").lower() == "true"
         if not skip_time_check and not is_within_send_window():
-            logger.info("Outside send window - skipping to prevent duplicate sends")
+            logger.info("Outside send window - skipping")
+            return 0
+
+        # Check if we've already broadcast today (prevents duplicate sends)
+        if not skip_time_check and has_already_broadcast_today():
+            logger.info("Already broadcast today - skipping to prevent duplicates")
             return 0
 
         # Get configuration
@@ -465,15 +526,30 @@ async def main() -> int:
         video = await get_jewish_history_video(daf)
         logger.info(f"Found video: {video.title}")
 
+        # Track if any broadcast succeeded
+        broadcast_succeeded = False
+
         # Send to main chat ID (if configured) for backwards compatibility
         if chat_id:
-            await send_to_telegram(video, bot_token, chat_id)
+            try:
+                await send_to_telegram(video, bot_token, chat_id)
+                broadcast_succeeded = True
+            except Exception as e:
+                logger.error(f"Failed to send to main chat: {e}")
 
         # Broadcast to all subscribers
-        await broadcast_to_subscribers(video, bot_token)
+        success_count, _ = await broadcast_to_subscribers(video, bot_token)
+        if success_count > 0:
+            broadcast_succeeded = True
 
         # Send to unified Torah Yomi channel
         await send_to_unified_channel(video)
+
+        # Save broadcast date if any message was sent successfully
+        if broadcast_succeeded:
+            israel_now = datetime.now(ISRAEL_TZ)
+            today_str = israel_now.strftime("%Y-%m-%d")
+            save_last_broadcast_date(today_str)
 
         return 0
 
