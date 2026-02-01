@@ -529,8 +529,11 @@ async def main() -> int:
         # Track if any broadcast succeeded
         broadcast_succeeded = False
 
-        # Send to main chat ID (if configured) for backwards compatibility
-        if chat_id:
+        # Get subscribers list for deduplication
+        subscribers = get_subscribers()
+
+        # Send to main chat ID only if NOT already in subscribers (avoid duplicates)
+        if chat_id and int(chat_id) not in subscribers:
             try:
                 await send_to_telegram(video, bot_token, chat_id)
                 broadcast_succeeded = True
