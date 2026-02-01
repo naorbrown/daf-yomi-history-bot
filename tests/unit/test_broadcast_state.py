@@ -7,11 +7,8 @@ Tests the deduplication mechanism that prevents duplicate daily broadcasts.
 import json
 import sys
 import tempfile
-from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-
-import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -21,7 +18,6 @@ from send_video import (
     save_last_broadcast_date,
     has_already_broadcast_today,
     is_within_send_window,
-    ISRAEL_TZ,
     SEND_HOUR,
     SEND_WINDOW_MINUTES_BEFORE,
     SEND_WINDOW_MINUTES_AFTER,
