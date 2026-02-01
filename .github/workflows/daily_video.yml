@@ -19,9 +19,9 @@ on:
         default: 'true'
         type: boolean
 
-# Security: Restrict workflow permissions to absolute minimum
+# Permissions: Need write access to save broadcast state
 permissions:
-  contents: read  # Only read repository files, cannot modify
+  contents: write  # Write access needed to save last_broadcast.json
 
 # Concurrency group ensures only one workflow runs at a time
 concurrency:
@@ -38,8 +38,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          persist-credentials: false  # Security: Don't store git credentials
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -62,3 +60,11 @@ jobs:
           TORAH_YOMI_PUBLISH_ENABLED: ${{ secrets.TORAH_YOMI_PUBLISH_ENABLED }}
         run: |
           python send_video.py
+
+      - name: Commit broadcast state
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add .github/state/last_broadcast.json || true
+          git diff --staged --quiet || git commit -m "chore: update broadcast state [skip ci]"
+          git push || true
