@@ -164,6 +164,8 @@ The script will:
 | Video not found | Video may not exist for today's daf - check [AllDaf](https://alldaf.org/series/3940) |
 | Wrong daf displayed | Bot uses Israel timezone - verify at [Hebcal](https://www.hebcal.com/sedrot) |
 | Daily video not sending | Check GitHub Actions logs in your fork |
+| Video arrives late (not at 6 AM) | GitHub Actions cron can be delayed up to 1+ hours - video sends within 5-8 AM window |
+| Receiving duplicate videos | Check if your chat ID is in both `TELEGRAM_CHAT_ID` secret and `subscribers.json` |
 | Commands slow | Commands poll every 5 min - this is a GitHub Actions limitation |
 | Commands not responding | Check Actions → Poll Bot Commands workflow is running and not failing |
 | Bot responds to old messages | State file may be missing - workflow will auto-initialize on next run |
