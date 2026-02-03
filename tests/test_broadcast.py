@@ -31,6 +31,9 @@ from send_video import (
     has_already_broadcast_today,
     get_last_broadcast_date,
     save_last_broadcast_date,
+    get_subscribers,
+    broadcast_to_subscribers,
+    VideoInfo,
 )
 
 
@@ -313,14 +316,125 @@ class TestEndToEndBroadcast:
     async def test_outside_window_skips_broadcast(self, mock_datetime, tmp_path):
         """Broadcast is skipped when outside the send window."""
         from send_video import main
-        
+
         mock_now = datetime(2026, 2, 2, 3, 0, 0, tzinfo=ISRAEL_TZ)  # 3 AM
         mock_datetime.now.return_value = mock_now
-        
+
         with patch.dict(os.environ, {
             "GITHUB_WORKSPACE": str(tmp_path),
             "TELEGRAM_BOT_TOKEN": "test-token",
         }):
             result = await main()
-            
+
             assert result == 0  # Success exit code (skip is not an error)
+
+
+class TestSubscriberDeduplication:
+    """Tests for preventing duplicate messages to subscribers who are also the main chat."""
+
+    def test_get_subscribers_returns_chat_ids(self, tmp_path):
+        """Test loading subscribers from state file."""
+        state_dir = tmp_path / ".github" / "state"
+        state_dir.mkdir(parents=True)
+        subscribers_file = state_dir / "subscribers.json"
+        subscribers_file.write_text(json.dumps({"chat_ids": [123, 456, 789]}))
+
+        with patch.dict(os.environ, {"GITHUB_WORKSPACE": str(tmp_path)}):
+            result = get_subscribers()
+            assert result == [123, 456, 789]
+
+    def test_get_subscribers_returns_empty_when_no_file(self, tmp_path):
+        """Test returns empty list when no subscribers file exists."""
+        with patch.dict(os.environ, {"GITHUB_WORKSPACE": str(tmp_path)}):
+            result = get_subscribers()
+            assert result == []
+
+    @pytest.mark.asyncio
+    async def test_broadcast_excludes_main_chat_id(self, tmp_path):
+        """Broadcast should not send to main chat ID if it's in subscribers list."""
+        state_dir = tmp_path / ".github" / "state"
+        state_dir.mkdir(parents=True)
+        subscribers_file = state_dir / "subscribers.json"
+        # Main chat ID 456 is also a subscriber
+        subscribers_file.write_text(json.dumps({"chat_ids": [123, 456, 789]}))
+
+        video = VideoInfo(
+            title="Test Video",
+            page_url="https://example.com",
+            video_url="https://example.com/video.mp4",
+            masechta="Berachos",
+            daf=10
+        )
+
+        with patch.dict(os.environ, {"GITHUB_WORKSPACE": str(tmp_path)}):
+            with patch('send_video.send_to_telegram', new_callable=AsyncMock) as mock_send:
+                mock_send.return_value = None
+
+                # Exclude chat ID 456 (the main chat)
+                success, failed = await broadcast_to_subscribers(video, "token", exclude_chat_id="456")
+
+                # Should only send to 123 and 789, not 456
+                assert success == 2
+                assert failed == 0
+
+                # Verify 456 was not called
+                called_chat_ids = [call.args[2] for call in mock_send.call_args_list]
+                assert "456" not in called_chat_ids
+                assert "123" in called_chat_ids
+                assert "789" in called_chat_ids
+
+    @pytest.mark.asyncio
+    async def test_broadcast_works_without_exclude(self, tmp_path):
+        """Broadcast should work normally when no exclude is specified."""
+        state_dir = tmp_path / ".github" / "state"
+        state_dir.mkdir(parents=True)
+        subscribers_file = state_dir / "subscribers.json"
+        subscribers_file.write_text(json.dumps({"chat_ids": [123, 456]}))
+
+        video = VideoInfo(
+            title="Test Video",
+            page_url="https://example.com",
+            video_url="https://example.com/video.mp4",
+            masechta="Berachos",
+            daf=10
+        )
+
+        with patch.dict(os.environ, {"GITHUB_WORKSPACE": str(tmp_path)}):
+            with patch('send_video.send_to_telegram', new_callable=AsyncMock) as mock_send:
+                mock_send.return_value = None
+
+                # No exclude specified
+                success, failed = await broadcast_to_subscribers(video, "token")
+
+                # Should send to both
+                assert success == 2
+                assert failed == 0
+
+    @pytest.mark.asyncio
+    async def test_broadcast_handles_negative_chat_ids(self, tmp_path):
+        """Broadcast should correctly handle negative chat IDs (groups/channels)."""
+        state_dir = tmp_path / ".github" / "state"
+        state_dir.mkdir(parents=True)
+        subscribers_file = state_dir / "subscribers.json"
+        # Negative chat ID represents a group
+        subscribers_file.write_text(json.dumps({"chat_ids": [123, -100456789, 789]}))
+
+        video = VideoInfo(
+            title="Test Video",
+            page_url="https://example.com",
+            video_url="https://example.com/video.mp4",
+            masechta="Berachos",
+            daf=10
+        )
+
+        with patch.dict(os.environ, {"GITHUB_WORKSPACE": str(tmp_path)}):
+            with patch('send_video.send_to_telegram', new_callable=AsyncMock) as mock_send:
+                mock_send.return_value = None
+
+                # Exclude the group chat
+                success, failed = await broadcast_to_subscribers(video, "token", exclude_chat_id="-100456789")
+
+                # Should only send to 123 and 789
+                assert success == 2
+                called_chat_ids = [call.args[2] for call in mock_send.call_args_list]
+                assert "-100456789" not in called_chat_ids

@@ -465,13 +465,16 @@ async def send_to_unified_channel(video: VideoInfo) -> None:
         logger.error(f"Failed to publish to unified channel: {e}")
 
 
-async def broadcast_to_subscribers(video: VideoInfo, bot_token: str) -> tuple[int, int]:
+async def broadcast_to_subscribers(
+    video: VideoInfo, bot_token: str, exclude_chat_id: Optional[str] = None
+) -> tuple[int, int]:
     """
     Broadcast video to all subscribers.
 
     Args:
         video: VideoInfo with video details
         bot_token: Telegram bot token
+        exclude_chat_id: Optional chat ID to exclude (to prevent duplicates)
 
     Returns:
         Tuple of (success_count, failure_count)
@@ -479,6 +482,17 @@ async def broadcast_to_subscribers(video: VideoInfo, bot_token: str) -> tuple[in
     subscribers = get_subscribers()
     if not subscribers:
         logger.info("No subscribers to broadcast to")
+        return 0, 0
+
+    # Filter out the excluded chat ID to prevent duplicate messages
+    if exclude_chat_id:
+        excluded_id = int(exclude_chat_id) if exclude_chat_id.lstrip("-").isdigit() else None
+        if excluded_id and excluded_id in subscribers:
+            subscribers = [s for s in subscribers if s != excluded_id]
+            logger.info(f"Excluded main chat ID {excluded_id} from subscriber broadcast")
+
+    if not subscribers:
+        logger.info("No additional subscribers to broadcast to (all excluded)")
         return 0, 0
 
     logger.info(f"Broadcasting to {len(subscribers)} subscribers...")
@@ -537,8 +551,8 @@ async def main() -> int:
             except Exception as e:
                 logger.error(f"Failed to send to main chat: {e}")
 
-        # Broadcast to all subscribers
-        success_count, _ = await broadcast_to_subscribers(video, bot_token)
+        # Broadcast to all subscribers (excluding main chat to prevent duplicates)
+        success_count, _ = await broadcast_to_subscribers(video, bot_token, exclude_chat_id=chat_id)
         if success_count > 0:
             broadcast_succeeded = True
 
