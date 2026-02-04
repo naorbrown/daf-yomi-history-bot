@@ -1,189 +1,128 @@
-# Daf Yomi History Bot
+# Daf Yomi History Telegram Bot
 
-A Telegram bot that delivers daily Jewish History videos from [AllDaf.org](https://alldaf.org)'s series by Dr. Henry Abramson, matching the Daf Yomi schedule.
+A Telegram bot that sends the daily Daf Yomi Jewish History video from [AllDaf.org](https://alldaf.org) every morning at 6:00 AM Israel time.
 
-[![Daily Video](https://github.com/naorbrown/daf-yomi-history-bot/actions/workflows/daily_video.yml/badge.svg)](https://github.com/naorbrown/daf-yomi-history-bot/actions/workflows/daily_video.yml)
-[![CI](https://github.com/naorbrown/daf-yomi-history-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/naorbrown/daf-yomi-history-bot/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+## Features
 
----
+- Fetches the current Daf Yomi from [Sefaria's API](https://www.sefaria.org)
+- Finds the corresponding Jewish History in Daf Yomi video by Dr. Henry Abramson
+- Sends a message with the video link to your Telegram chat
+- Runs automatically every day at 6:00 AM Israel time
 
-## Start Using the Bot
+## Setup
 
-1. **Open Telegram** on your phone or computer
-2. **Search for** `@DafHistoryBot`
-3. **Tap Start**
+### 1. Create a Telegram Bot
 
-You'll receive a daily video every morning at 6:00 AM Israel time.
+1. Open Telegram and search for [@BotFather](https://t.me/BotFather)
+2. Send `/newbot` and follow the prompts to create your bot
+3. Copy the bot token (looks like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
 
-> **Quick link:** [t.me/DafHistoryBot](https://t.me/DafHistoryBot)
+### 2. Get Your Chat ID
 
----
+1. Start a chat with your new bot (search for it and click Start)
+2. Send any message to the bot
+3. Visit `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
+4. Find your chat ID in the response (looks like `123456789`)
 
-## How It Works
+### 3. Install Dependencies
 
-This bot runs entirely on **GitHub Actions** - no servers required.
-
-| Workflow | Schedule | Purpose |
-|----------|----------|---------|
-| `daily_video.yml` | 6:00 AM Israel | Send daily history video |
-| `poll-commands.yml` | Every 5 minutes | Process bot commands |
-| `ci.yml` | On push/PR | Run tests |
-
-### Commands
-
-| Command | Description |
-|---------|-------------|
-| `/start` | Welcome message |
-| `/today` | Get today's video |
-| `/help` | Show help |
-
-Note: Commands are processed every 5 minutes (GitHub Actions limitation).
-
----
-
-## For Developers
-
-### Quick Setup (5 minutes)
-
-#### Step 1: Fork This Repository
-
-Click the **Fork** button at the top right.
-
-#### Step 2: Create a Telegram Bot
-
-1. Message [@BotFather](https://t.me/BotFather) on Telegram
-2. Send `/newbot`
-3. Choose a name and username
-4. Save the **bot token** (looks like `123456:ABC-DEF1234...`)
-
-#### Step 3: Get Your Chat ID
-
-1. Message your new bot (send any message)
-2. Visit: `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates`
-3. Find `"chat":{"id":123456789}` in the response
-
-#### Step 4: Add GitHub Secrets
-
-Go to your fork → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
-
-| Secret Name | Value |
-|-------------|-------|
-| `TELEGRAM_BOT_TOKEN` | Your bot token from Step 2 |
-| `TELEGRAM_CHAT_ID` | Your chat ID from Step 3 |
-
-#### Step 5: Enable GitHub Actions
-
-Go to **Actions** tab → Click **"I understand my workflows, go ahead and enable them"**
-
-Done! Daily videos will send at 6:00 AM Israel time.
-
----
-
-### Project Structure
-
-```
-daf-yomi-history-bot/
-├── send_video.py              # Daily broadcast script
-├── scripts/
-│   └── poll_commands.py       # Command polling for GitHub Actions
-├── src/                       # Core modules
-│   ├── command_parser.py      # Command parsing utilities
-│   ├── rate_limiter.py        # Rate limiting (5 req/min/user)
-│   └── message_builder.py     # Message formatting
-├── tests/
-│   ├── unit/                  # Unit tests (pytest)
-│   └── test_bot.py            # Integration tests
-├── test_apis.py               # API integration test script
-├── .github/
-│   ├── workflows/
-│   │   ├── daily_video.yml    # Daily 6AM video sender
-│   │   ├── poll-commands.yml  # Command polling (every 5 min)
-│   │   └── ci.yml             # CI pipeline
-│   └── state/                 # Bot state (auto-updated)
-├── requirements.txt           # Python dependencies
-└── README.md                  # This file
+```bash
+pip install -r requirements.txt
 ```
 
----
+### 4. Set Environment Variables
+
+```bash
+export TELEGRAM_BOT_TOKEN="your-bot-token-here"
+export TELEGRAM_CHAT_ID="your-chat-id-here"
+```
+
+### 5. Run the Bot
+
+```bash
+python daf_yomi_bot.py
+```
 
 ## Testing
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
-pip install pytest pytest-cov pytest-asyncio pyyaml
-
-# Run all tests
-pytest tests/ -v
-
-# Run with coverage
-pytest tests/ -v --cov=src --cov-report=term-missing
-
-# Run API integration tests
-python test_apis.py
-```
-
-### Local Bot Testing
-
-To test the bot command polling locally:
+To test the scraper without Telegram credentials:
 
 ```bash
-# Set your bot token
-export TELEGRAM_BOT_TOKEN="your-token-here"
-
-# Run the poll script
-python scripts/poll_commands.py
+python test_scraper.py
 ```
 
-The script will:
-1. Initialize state on first run (skips old messages)
-2. Fetch new updates from Telegram
-3. Process any pending commands
-4. Log all activity to console
+## Deployment Options
 
----
+### Option 1: Run on a Server (VPS, Raspberry Pi, etc.)
 
-## Cost
+Use a process manager like `systemd` or `supervisor` to keep the bot running.
 
-**Free. Forever.**
+Example systemd service (`/etc/systemd/system/daf-yomi-bot.service`):
 
-| Service | Cost |
-|---------|------|
-| GitHub Actions | Free (public repos) |
-| Hebcal API | Free |
-| AllDaf.org | Free |
-| Telegram Bot API | Free |
+```ini
+[Unit]
+Description=Daf Yomi History Telegram Bot
+After=network.target
 
----
+[Service]
+Type=simple
+User=youruser
+WorkingDirectory=/path/to/daf-history
+Environment=TELEGRAM_BOT_TOKEN=your-token
+Environment=TELEGRAM_CHAT_ID=your-chat-id
+ExecStart=/usr/bin/python3 daf_yomi_bot.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+```bash
+sudo systemctl enable daf-yomi-bot
+sudo systemctl start daf-yomi-bot
+```
+
+### Option 2: Docker
+
+Create a `Dockerfile`:
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY daf_yomi_bot.py .
+
+CMD ["python", "daf_yomi_bot.py"]
+```
+
+Build and run:
+```bash
+docker build -t daf-yomi-bot .
+docker run -d \
+  -e TELEGRAM_BOT_TOKEN="your-token" \
+  -e TELEGRAM_CHAT_ID="your-chat-id" \
+  --name daf-yomi-bot \
+  --restart unless-stopped \
+  daf-yomi-bot
+```
+
+### Option 3: Cloud Functions (e.g., AWS Lambda, Google Cloud Functions)
+
+For serverless deployment, you'll need to:
+1. Remove the scheduler and just run `send_daily_video()` directly
+2. Set up a cloud scheduler (CloudWatch Events, Cloud Scheduler) to trigger at 6:00 AM Israel time
+3. Configure environment variables in your cloud platform
 
 ## Troubleshooting
 
-| Problem | Solution |
-|---------|----------|
-| Video not found | Video may not exist for today's daf - check [AllDaf](https://alldaf.org/series/3940) |
-| Wrong daf displayed | Bot uses Israel timezone - verify at [Hebcal](https://www.hebcal.com/sedrot) |
-| Daily video not sending | Check GitHub Actions logs in your fork |
-| Video arrives late (not at 6 AM) | GitHub Actions cron can be delayed up to 1+ hours - video sends within 5-8 AM window |
-| Receiving duplicate videos | Check if your chat ID is in both `TELEGRAM_CHAT_ID` secret and `subscribers.json` |
-| Commands slow | Commands poll every 5 min - this is a GitHub Actions limitation |
-| Commands not responding | Check Actions → Poll Bot Commands workflow is running and not failing |
-| Bot responds to old messages | State file may be missing - workflow will auto-initialize on next run |
-
----
+- **Bot not sending messages**: Check that both environment variables are set correctly
+- **Video not found**: The AllDaf website structure may have changed; check the series page manually
+- **Wrong daf**: The bot uses Sefaria's calendar, which should always be accurate
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
-
----
-
-## Acknowledgments
-
-- [AllDaf.org](https://alldaf.org) & the Orthodox Union
-- [Dr. Henry Abramson](https://www.henryabramson.com/)
-- [Hebcal](https://www.hebcal.com/)
-
----
-
-*Not affiliated with AllDaf.org, the Orthodox Union, or Hebcal.*
+MIT
