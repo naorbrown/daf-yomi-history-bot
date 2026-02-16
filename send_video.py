@@ -46,9 +46,9 @@ REQUEST_TIMEOUT = 30.0
 
 # Time window for sending (to handle GitHub Actions cron delays)
 # Widened window with proper deduplication via state file
-SEND_HOUR = 6
-SEND_WINDOW_MINUTES_BEFORE = 60  # 5:00 AM
-SEND_WINDOW_MINUTES_AFTER = 120  # 8:00 AM
+SEND_HOUR = 3
+SEND_WINDOW_MINUTES_BEFORE = 60  # 2:00 AM
+SEND_WINDOW_MINUTES_AFTER = 120  # 5:00 AM
 
 # State file for tracking last broadcast date
 LAST_BROADCAST_FILE = ".github/state/last_broadcast.json"
@@ -121,7 +121,7 @@ def is_within_send_window() -> bool:
     Check if current Israel time is within the send window.
 
     This prevents duplicate sends when both DST cron jobs run.
-    Only the cron job that runs when it's ~6AM Israel time will actually send.
+    Only the cron job that runs when it's ~3AM Israel time will actually send.
 
     Returns:
         True if within send window, False otherwise
@@ -132,8 +132,8 @@ def is_within_send_window() -> bool:
 
     # Convert to minutes since midnight for easier comparison
     current_minutes = current_hour * 60 + current_minute
-    window_start = SEND_HOUR * 60 - SEND_WINDOW_MINUTES_BEFORE  # 5:45 AM = 345
-    window_end = SEND_HOUR * 60 + SEND_WINDOW_MINUTES_AFTER  # 6:30 AM = 390
+    window_start = SEND_HOUR * 60 - SEND_WINDOW_MINUTES_BEFORE  # 2:00 AM = 120
+    window_end = SEND_HOUR * 60 + SEND_WINDOW_MINUTES_AFTER  # 5:00 AM = 300
 
     is_within = window_start <= current_minutes <= window_end
 

@@ -37,7 +37,7 @@ class MessageBuilder:
         "/today - Get today's video now\n"
         "/help - Show this message\n\n"
         "You'll automatically receive the daily video every morning at "
-        "6:00 AM Israel time.\n\n"
+        "3:00 AM Israel time.\n\n"
         "Enjoy your learning!"
     )
 
@@ -50,7 +50,7 @@ class MessageBuilder:
         "This bot sends Jewish History videos from AllDaf.org's series "
         "by Dr. Henry Abramson. Each video corresponds to the daily Daf Yomi page.\n\n"
         "Schedule:\n"
-        "Daily videos are sent automatically at 6:00 AM Israel time."
+        "Daily videos are sent automatically at 3:00 AM Israel time."
     )
 
     ERROR_MESSAGE = (
