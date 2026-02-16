@@ -1,13 +1,13 @@
 # Daf Yomi History Telegram Bot
 
-A Telegram bot that sends the daily Daf Yomi Jewish History video from [AllDaf.org](https://alldaf.org) every morning at 6:00 AM Israel time.
+A Telegram bot that sends the daily Daf Yomi Jewish History video from [AllDaf.org](https://alldaf.org) every morning at 3:00 AM Israel time.
 
 ## Features
 
 - Fetches the current Daf Yomi from [Sefaria's API](https://www.sefaria.org)
 - Finds the corresponding Jewish History in Daf Yomi video by Dr. Henry Abramson
 - Sends a message with the video link to your Telegram chat
-- Runs automatically every day at 6:00 AM Israel time
+- Runs automatically every day at 3:00 AM Israel time
 
 ## Setup
 
@@ -114,7 +114,7 @@ docker run -d \
 
 For serverless deployment, you'll need to:
 1. Remove the scheduler and just run `send_daily_video()` directly
-2. Set up a cloud scheduler (CloudWatch Events, Cloud Scheduler) to trigger at 6:00 AM Israel time
+2. Set up a cloud scheduler (CloudWatch Events, Cloud Scheduler) to trigger at 3:00 AM Israel time
 3. Configure environment variables in your cloud platform
 
 ## Troubleshooting

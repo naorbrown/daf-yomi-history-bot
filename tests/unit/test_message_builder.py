@@ -32,7 +32,7 @@ class TestMessageBuilder:
     def test_welcome_message_contains_schedule(self):
         """Test welcome message mentions schedule."""
         msg = MessageBuilder.build_welcome()
-        assert "6:00 AM Israel time" in msg
+        assert "3:00 AM Israel time" in msg
 
     def test_welcome_message_mentions_alldaf(self):
         """Test welcome message mentions AllDaf.org."""
@@ -53,7 +53,7 @@ class TestMessageBuilder:
     def test_help_message_contains_schedule(self):
         """Test help message mentions schedule."""
         msg = MessageBuilder.build_help()
-        assert "6:00 AM Israel time" in msg
+        assert "3:00 AM Israel time" in msg
 
     def test_help_message_contains_about(self):
         """Test help message has about section."""

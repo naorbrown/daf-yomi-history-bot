@@ -94,7 +94,7 @@ WELCOME_MESSAGE = """Welcome to Daf Yomi History Bot!
 
 You're now subscribed to daily Jewish History videos by Dr. Henry Abramson, matching the Daf Yomi schedule.
 
-Daily broadcast: 6:00 AM Israel time
+Daily broadcast: 3:00 AM Israel time
 On-demand: Use /today anytime"""
 
 ERROR_MESSAGE = """Sorry, I couldn't find today's video. Please try again later.

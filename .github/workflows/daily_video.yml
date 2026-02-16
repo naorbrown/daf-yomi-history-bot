@@ -2,11 +2,11 @@ name: Send Daily Daf Yomi History Video
 
 on:
   schedule:
-    # 6:00 AM Israel time - single cron job at 4:00 UTC
-    # Winter (Nov-Mar): 4:00 UTC = 6:00 AM IST (exact)
-    # Summer (Apr-Oct): 4:00 UTC = 7:00 AM IDT (within send window)
-    # The script uses the send window (5:00-8:00 AM Israel) to handle both cases
-    - cron: '0 4 * * *'
+    # 3:00 AM Israel time - single cron job at 1:00 UTC
+    # Winter (Nov-Mar): 1:00 UTC = 3:00 AM IST (exact)
+    # Summer (Apr-Oct): 1:00 UTC = 4:00 AM IDT (within send window)
+    # The script uses the send window (2:00-5:00 AM Israel) to handle both cases
+    - cron: '0 1 * * *'
 
   # Allow manual trigger for testing (owner only via GitHub UI)
   workflow_dispatch:
