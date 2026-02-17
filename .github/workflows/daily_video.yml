@@ -16,6 +16,11 @@ on:
         required: false
         default: 'true'
         type: boolean
+      override_date:
+        description: 'Override date (YYYY-MM-DD) to send a specific day'
+        required: false
+        default: ''
+        type: string
 
 # Permissions: Need write access to save broadcast state
 permissions:
@@ -53,6 +58,8 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           # Skip dedup check for manual triggers, enforce for scheduled runs
           SKIP_TIME_CHECK: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_dedup_check || 'false' }}
+          # Override date for sending a specific day's video
+          OVERRIDE_DATE: ${{ github.event_name == 'workflow_dispatch' && inputs.override_date || '' }}
           # Unified Torah Yomi Channel
           TORAH_YOMI_CHANNEL_ID: ${{ secrets.TORAH_YOMI_CHANNEL_ID }}
           TORAH_YOMI_CHANNEL_BOT_TOKEN: ${{ secrets.TORAH_YOMI_CHANNEL_BOT_TOKEN }}

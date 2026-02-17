@@ -233,8 +233,13 @@ async def get_todays_daf() -> DafInfo:
     Raises:
         DafNotFoundError: If the daf cannot be determined
     """
-    israel_now = datetime.now(ISRAEL_TZ)
-    today_str = israel_now.strftime("%Y-%m-%d")
+    override_date = os.environ.get("OVERRIDE_DATE", "").strip()
+    if override_date:
+        today_str = override_date
+        logger.info(f"Using override date: {today_str}")
+    else:
+        israel_now = datetime.now(ISRAEL_TZ)
+        today_str = israel_now.strftime("%Y-%m-%d")
 
     params = {
         "v": "1",
