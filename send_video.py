@@ -44,13 +44,10 @@ ALLDAF_SERIES_URL = f"{ALLDAF_BASE_URL}/series/3940"
 HEBCAL_API_URL = "https://www.hebcal.com/hebcal"
 REQUEST_TIMEOUT = 30.0
 
-# Time window for sending (to handle GitHub Actions cron delays)
-# Widened window with proper deduplication via state file
-SEND_HOUR = 3
-SEND_WINDOW_MINUTES_BEFORE = 60  # 2:00 AM
-SEND_WINDOW_MINUTES_AFTER = 120  # 5:00 AM
-
 # State file for tracking last broadcast date
+# Deduplication is handled via this state file, not time windows.
+# This is more robust than time-based checks because GitHub Actions
+# cron jobs can be delayed by 20-90+ minutes unpredictably.
 LAST_BROADCAST_FILE = ".github/state/last_broadcast.json"
 
 # Masechta name mapping: Hebcal uses different transliterations than AllDaf
@@ -115,36 +112,6 @@ class VideoNotFoundError(DafYomiError):
 
     pass
 
-
-def is_within_send_window() -> bool:
-    """
-    Check if current Israel time is within the send window.
-
-    This prevents duplicate sends when both DST cron jobs run.
-    Only the cron job that runs when it's ~3AM Israel time will actually send.
-
-    Returns:
-        True if within send window, False otherwise
-    """
-    israel_now = datetime.now(ISRAEL_TZ)
-    current_hour = israel_now.hour
-    current_minute = israel_now.minute
-
-    # Convert to minutes since midnight for easier comparison
-    current_minutes = current_hour * 60 + current_minute
-    window_start = SEND_HOUR * 60 - SEND_WINDOW_MINUTES_BEFORE  # 2:00 AM = 120
-    window_end = SEND_HOUR * 60 + SEND_WINDOW_MINUTES_AFTER  # 5:00 AM = 300
-
-    is_within = window_start <= current_minutes <= window_end
-
-    logger.info(
-        f"Israel time: {israel_now.strftime('%H:%M')} - "
-        f"Send window: {window_start // 60}:{window_start % 60:02d} - "
-        f"{window_end // 60}:{window_end % 60:02d} - "
-        f"Within window: {is_within}"
-    )
-
-    return is_within
 
 
 def get_config() -> tuple[str, Optional[str]]:
@@ -519,14 +486,14 @@ async def main() -> int:
         Exit code (0 for success, 1 for failure)
     """
     try:
-        # Check if we're within the send window (prevents running at wrong time)
-        skip_time_check = os.environ.get("SKIP_TIME_CHECK", "").lower() == "true"
-        if not skip_time_check and not is_within_send_window():
-            logger.info("Outside send window - skipping")
-            return 0
+        skip_dedup_check = os.environ.get("SKIP_TIME_CHECK", "").lower() == "true"
+
+        # Log current Israel time for debugging
+        israel_now = datetime.now(ISRAEL_TZ)
+        logger.info(f"Israel time: {israel_now.strftime('%Y-%m-%d %H:%M')}")
 
         # Check if we've already broadcast today (prevents duplicate sends)
-        if not skip_time_check and has_already_broadcast_today():
+        if not skip_dedup_check and has_already_broadcast_today():
             logger.info("Already broadcast today - skipping to prevent duplicates")
             return 0
 

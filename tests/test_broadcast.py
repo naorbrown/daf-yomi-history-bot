@@ -5,7 +5,6 @@ These tests verify that:
 1. Broadcasts only happen once per day (no duplicates)
 2. Israel timezone is used correctly for date calculations
 3. DST transitions are handled properly
-4. The send window works correctly
 """
 
 import json
@@ -24,10 +23,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from send_video import (
     ISRAEL_TZ,
-    SEND_HOUR,
-    SEND_WINDOW_MINUTES_BEFORE,
-    SEND_WINDOW_MINUTES_AFTER,
-    is_within_send_window,
     has_already_broadcast_today,
     get_last_broadcast_date,
     save_last_broadcast_date,
@@ -58,62 +53,6 @@ class TestIsraelTimezone:
         utc_offset = summer_dt.utcoffset()
         assert utc_offset == timedelta(hours=3)
 
-
-class TestSendWindow:
-    """Tests for the send window logic."""
-
-    def test_send_window_constants(self):
-        """Verify send window is 2:00 AM to 5:00 AM Israel time."""
-        # Window starts at 2:00 AM (3:00 - 60 minutes)
-        window_start_hour = SEND_HOUR - (SEND_WINDOW_MINUTES_BEFORE // 60)
-        assert window_start_hour == 2
-
-        # Window ends at 5:00 AM (3:00 + 120 minutes)
-        window_end_hour = SEND_HOUR + (SEND_WINDOW_MINUTES_AFTER // 60)
-        assert window_end_hour == 5
-
-    @patch('send_video.datetime')
-    def test_within_window_at_3am(self, mock_datetime):
-        """3:00 AM Israel time is within the window."""
-        mock_now = datetime(2026, 2, 2, 3, 0, 0, tzinfo=ISRAEL_TZ)
-        mock_datetime.now.return_value = mock_now
-        assert is_within_send_window() is True
-
-    @patch('send_video.datetime')
-    def test_within_window_at_2am(self, mock_datetime):
-        """2:00 AM Israel time is within the window (edge)."""
-        mock_now = datetime(2026, 2, 2, 2, 0, 0, tzinfo=ISRAEL_TZ)
-        mock_datetime.now.return_value = mock_now
-        assert is_within_send_window() is True
-
-    @patch('send_video.datetime')
-    def test_within_window_at_5am(self, mock_datetime):
-        """5:00 AM Israel time is within the window (edge)."""
-        mock_now = datetime(2026, 2, 2, 5, 0, 0, tzinfo=ISRAEL_TZ)
-        mock_datetime.now.return_value = mock_now
-        assert is_within_send_window() is True
-
-    @patch('send_video.datetime')
-    def test_outside_window_at_1am(self, mock_datetime):
-        """1:00 AM Israel time is outside the window."""
-        mock_now = datetime(2026, 2, 2, 1, 0, 0, tzinfo=ISRAEL_TZ)
-        mock_datetime.now.return_value = mock_now
-        assert is_within_send_window() is False
-
-    @patch('send_video.datetime')
-    def test_outside_window_at_6am(self, mock_datetime):
-        """6:00 AM Israel time is outside the window."""
-        mock_now = datetime(2026, 2, 2, 6, 0, 0, tzinfo=ISRAEL_TZ)
-        mock_datetime.now.return_value = mock_now
-        assert is_within_send_window() is False
-
-    @patch('send_video.datetime')
-    def test_within_window_at_4am_summer(self, mock_datetime):
-        """4:00 AM Israel time in summer (when 1:00 UTC cron runs) is within window."""
-        # July 15, 2026 - summer time, 1:00 UTC = 4:00 AM IDT
-        mock_now = datetime(2026, 7, 15, 4, 0, 0, tzinfo=ISRAEL_TZ)
-        mock_datetime.now.return_value = mock_now
-        assert is_within_send_window() is True
 
 
 class TestBroadcastDeduplication:
@@ -207,31 +146,6 @@ class TestDSTTransitions:
         # Both should report the same date
         assert before.strftime("%Y-%m-%d") == after.strftime("%Y-%m-%d")
 
-    @patch('send_video.datetime')
-    def test_1am_utc_summer_is_4am_israel(self, mock_datetime):
-        """
-        1:00 UTC in summer = 4:00 AM Israel (IDT), which is within window.
-
-        This verifies our single-cron approach works for summer time.
-        """
-        # 1:00 UTC on July 15, 2026 = 4:00 AM IDT
-        mock_now = datetime(2026, 7, 15, 4, 0, 0, tzinfo=ISRAEL_TZ)
-        mock_datetime.now.return_value = mock_now
-
-        assert is_within_send_window() is True
-
-    @patch('send_video.datetime')
-    def test_1am_utc_winter_is_3am_israel(self, mock_datetime):
-        """
-        1:00 UTC in winter = 3:00 AM Israel (IST), which is within window.
-
-        This verifies our single-cron approach works for winter time.
-        """
-        # 1:00 UTC on January 15, 2026 = 3:00 AM IST
-        mock_now = datetime(2026, 1, 15, 3, 0, 0, tzinfo=ISRAEL_TZ)
-        mock_datetime.now.return_value = mock_now
-
-        assert is_within_send_window() is True
 
 
 class TestEndToEndBroadcast:
@@ -309,23 +223,6 @@ class TestEndToEndBroadcast:
             # Should exit early without sending
             result = await main()
             
-            assert result == 0  # Success exit code (skip is not an error)
-
-    @pytest.mark.asyncio
-    @patch('send_video.datetime')
-    async def test_outside_window_skips_broadcast(self, mock_datetime, tmp_path):
-        """Broadcast is skipped when outside the send window."""
-        from send_video import main
-
-        mock_now = datetime(2026, 2, 2, 0, 0, 0, tzinfo=ISRAEL_TZ)  # midnight (outside window)
-        mock_datetime.now.return_value = mock_now
-
-        with patch.dict(os.environ, {
-            "GITHUB_WORKSPACE": str(tmp_path),
-            "TELEGRAM_BOT_TOKEN": "test-token",
-        }):
-            result = await main()
-
             assert result == 0  # Success exit code (skip is not an error)
 
 

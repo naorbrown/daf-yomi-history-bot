@@ -20,11 +20,7 @@ from send_video import (
     get_last_broadcast_date,
     save_last_broadcast_date,
     has_already_broadcast_today,
-    is_within_send_window,
     ISRAEL_TZ,
-    SEND_HOUR,
-    SEND_WINDOW_MINUTES_BEFORE,
-    SEND_WINDOW_MINUTES_AFTER,
 )
 
 
@@ -134,78 +130,3 @@ class TestHasAlreadyBroadcastToday:
                     assert result is False
 
 
-class TestIsWithinSendWindow:
-    """Tests for is_within_send_window function."""
-
-    def test_within_window_at_3am(self):
-        with patch("send_video.datetime") as mock_datetime:
-            mock_now = MagicMock()
-            mock_now.hour = 3
-            mock_now.minute = 0
-            mock_now.strftime.return_value = "03:00"
-            mock_datetime.now.return_value = mock_now
-
-            result = is_within_send_window()
-            assert result is True
-
-    def test_within_window_at_window_start(self):
-        """Test at 2:00 AM (window start)."""
-        with patch("send_video.datetime") as mock_datetime:
-            mock_now = MagicMock()
-            mock_now.hour = 2
-            mock_now.minute = 0
-            mock_now.strftime.return_value = "02:00"
-            mock_datetime.now.return_value = mock_now
-
-            result = is_within_send_window()
-            assert result is True
-
-    def test_within_window_at_window_end(self):
-        """Test at 5:00 AM (window end)."""
-        with patch("send_video.datetime") as mock_datetime:
-            mock_now = MagicMock()
-            mock_now.hour = 5
-            mock_now.minute = 0
-            mock_now.strftime.return_value = "05:00"
-            mock_datetime.now.return_value = mock_now
-
-            result = is_within_send_window()
-            assert result is True
-
-    def test_outside_window_before(self):
-        """Test at 1:59 AM (before window)."""
-        with patch("send_video.datetime") as mock_datetime:
-            mock_now = MagicMock()
-            mock_now.hour = 1
-            mock_now.minute = 59
-            mock_now.strftime.return_value = "01:59"
-            mock_datetime.now.return_value = mock_now
-
-            result = is_within_send_window()
-            assert result is False
-
-    def test_outside_window_after(self):
-        """Test at 5:01 AM (after window)."""
-        with patch("send_video.datetime") as mock_datetime:
-            mock_now = MagicMock()
-            mock_now.hour = 5
-            mock_now.minute = 1
-            mock_now.strftime.return_value = "05:01"
-            mock_datetime.now.return_value = mock_now
-
-            result = is_within_send_window()
-            assert result is False
-
-
-class TestTimeWindowConstants:
-    """Tests for time window constants."""
-
-    def test_window_is_wide_enough(self):
-        """Ensure the window is wide enough to handle GitHub Actions delays."""
-        window_minutes = SEND_WINDOW_MINUTES_BEFORE + SEND_WINDOW_MINUTES_AFTER
-        # At least 2 hours to handle typical cron delays
-        assert window_minutes >= 120
-
-    def test_send_hour_is_3am(self):
-        """Ensure broadcasts are centered around 3 AM."""
-        assert SEND_HOUR == 3
