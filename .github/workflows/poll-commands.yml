@@ -27,10 +27,20 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install httpx beautifulsoup4
+        run: pip install httpx beautifulsoup4 python-telegram-bot
 
       - name: Warm video cache
+        continue-on-error: true
         run: python scripts/poll_commands.py --warm-cache
+
+      - name: Fallback daily broadcast
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TORAH_YOMI_CHANNEL_ID: ${{ secrets.TORAH_YOMI_CHANNEL_ID }}
+          TORAH_YOMI_CHANNEL_BOT_TOKEN: ${{ secrets.TORAH_YOMI_CHANNEL_BOT_TOKEN }}
+          TORAH_YOMI_PUBLISH_ENABLED: ${{ secrets.TORAH_YOMI_PUBLISH_ENABLED }}
+        run: python send_video.py --fallback
 
       - name: Poll and respond to commands
         run: python scripts/poll_commands.py
@@ -44,4 +54,4 @@ jobs:
           git pull --rebase || true
           git add .github/state/*.json || true
           git diff --staged --quiet || git commit -m "chore: update bot state [skip ci]"
-          git push
+          for i in 1 2 3; do git push && break || sleep $((i * 2)); done

@@ -553,5 +553,14 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    # Fallback mode: only run if it's past broadcast time in Israel
+    # Used by poll-commands workflow as a safety net for cron failures
+    if "--fallback" in sys.argv:
+        israel_now = datetime.now(ISRAEL_TZ)
+        if israel_now.hour < 3 or (israel_now.hour == 3 and israel_now.minute < 30):
+            logger.info("Fallback: too early (before 3:30 AM IST), skipping")
+            sys.exit(0)
+        logger.info("Fallback mode: running broadcast (past 3:30 AM IST)")
+
     exit_code = asyncio.run(main())
     sys.exit(exit_code)

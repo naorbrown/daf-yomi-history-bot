@@ -74,4 +74,4 @@ jobs:
           git pull --rebase || true
           git add .github/state/last_broadcast.json || true
           git diff --staged --quiet || git commit -m "chore: update broadcast state [skip ci]"
-          git push
+          for i in 1 2 3; do git push && break || sleep $((i * 2)); done
