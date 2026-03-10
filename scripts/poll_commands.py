@@ -706,6 +706,12 @@ async def warm_cache() -> int:
         logger.info(f"Cache warmed successfully: {video.title}")
         return 0
 
+    except ValueError as e:
+        # Video not found on AllDaf.org — expected when today's video
+        # hasn't been uploaded yet. Not a fatal error.
+        logger.warning(f"Cache warming skipped (video not available): {e}")
+        return 0
+
     except Exception as e:
         logger.exception(f"Error warming cache: {e}")
         return 1
