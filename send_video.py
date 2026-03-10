@@ -555,7 +555,8 @@ async def main() -> int:
 if __name__ == "__main__":
     # Fallback mode: only run if it's past broadcast time in Israel
     # Used by poll-commands workflow as a safety net for cron failures
-    if "--fallback" in sys.argv:
+    is_fallback = "--fallback" in sys.argv
+    if is_fallback:
         israel_now = datetime.now(ISRAEL_TZ)
         if israel_now.hour < 3 or (israel_now.hour == 3 and israel_now.minute < 30):
             logger.info("Fallback: too early (before 3:30 AM IST), skipping")
@@ -563,4 +564,12 @@ if __name__ == "__main__":
         logger.info("Fallback mode: running broadcast (past 3:30 AM IST)")
 
     exit_code = asyncio.run(main())
+
+    # In fallback mode, treat video-not-found as non-fatal since the
+    # daily_video workflow will handle retries. This prevents blocking
+    # the poll-commands workflow from responding to user commands.
+    if is_fallback and exit_code != 0:
+        logger.info("Fallback: broadcast failed (video may not be available yet), continuing")
+        sys.exit(0)
+
     sys.exit(exit_code)

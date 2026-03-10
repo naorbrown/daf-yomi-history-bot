@@ -34,6 +34,7 @@ jobs:
         run: python scripts/poll_commands.py --warm-cache
 
       - name: Fallback daily broadcast
+        continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
