@@ -362,13 +362,13 @@ async def get_jewish_history_video(daf: DafInfo) -> VideoInfo:
         )
 
 
-async def send_to_telegram(video: VideoInfo, bot_token: str, chat_id: str) -> None:
+async def send_to_telegram(video: VideoInfo, bot: Bot, chat_id: str) -> None:
     """
     Send the video to Telegram.
 
     Args:
         video: VideoInfo with video details
-        bot_token: Telegram bot token
+        bot: Initialized Telegram Bot instance
         chat_id: Telegram chat ID
 
     Raises:
@@ -380,8 +380,6 @@ async def send_to_telegram(video: VideoInfo, bot_token: str, chat_id: str) -> No
         f"{video.title}\n\n"
         f"{video.page_url}"
     )
-
-    bot = Bot(token=bot_token)
 
     try:
         if video.video_url:
@@ -438,14 +436,14 @@ async def send_to_unified_channel(video: VideoInfo) -> None:
 
 
 async def broadcast_to_subscribers(
-    video: VideoInfo, bot_token: str, exclude_chat_id: Optional[str] = None
+    video: VideoInfo, bot: Bot, exclude_chat_id: Optional[str] = None
 ) -> tuple[int, int]:
     """
     Broadcast video to all subscribers.
 
     Args:
         video: VideoInfo with video details
-        bot_token: Telegram bot token
+        bot: Initialized Telegram Bot instance
         exclude_chat_id: Optional chat ID to exclude (to prevent duplicates)
 
     Returns:
@@ -473,7 +471,7 @@ async def broadcast_to_subscribers(
 
     for chat_id in subscribers:
         try:
-            await send_to_telegram(video, bot_token, str(chat_id))
+            await send_to_telegram(video, bot, str(chat_id))
             success += 1
         except Exception as e:
             logger.error(f"Failed to send to {chat_id}: {e}")
@@ -515,18 +513,20 @@ async def main() -> int:
         # Track if any broadcast succeeded
         broadcast_succeeded = False
 
-        # Send to main chat ID (if configured) for backwards compatibility
-        if chat_id:
-            try:
-                await send_to_telegram(video, bot_token, chat_id)
-                broadcast_succeeded = True
-            except Exception as e:
-                logger.error(f"Failed to send to main chat: {e}")
+        # Create Bot once with proper async lifecycle (required by python-telegram-bot v20+)
+        async with Bot(token=bot_token) as bot:
+            # Send to main chat ID (if configured) for backwards compatibility
+            if chat_id:
+                try:
+                    await send_to_telegram(video, bot, chat_id)
+                    broadcast_succeeded = True
+                except Exception as e:
+                    logger.error(f"Failed to send to main chat: {e}")
 
-        # Broadcast to all subscribers (excluding main chat to prevent duplicates)
-        success_count, _ = await broadcast_to_subscribers(video, bot_token, exclude_chat_id=chat_id)
-        if success_count > 0:
-            broadcast_succeeded = True
+            # Broadcast to all subscribers (excluding main chat to prevent duplicates)
+            success_count, _ = await broadcast_to_subscribers(video, bot, exclude_chat_id=chat_id)
+            if success_count > 0:
+                broadcast_succeeded = True
 
         # Send to unified Torah Yomi channel
         await send_to_unified_channel(video)
