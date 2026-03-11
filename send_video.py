@@ -539,6 +539,13 @@ async def main() -> int:
 
         return 0
 
+    except VideoNotFoundError as e:
+        # Not every daf has a Jewish History video — this is expected.
+        # Don't save broadcast state so the fallback can retry if the
+        # video is uploaded later today.
+        logger.warning(f"No video available: {e}")
+        return 0
+
     except DafYomiError as e:
         logger.error(f"Daf Yomi error: {e}")
         return 1
