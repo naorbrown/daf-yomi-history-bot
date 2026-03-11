@@ -158,8 +158,10 @@ class TestEndToEndBroadcast:
     @patch('send_video.send_to_telegram')
     @patch('send_video.broadcast_to_subscribers')
     @patch('send_video.send_to_unified_channel')
+    @patch('send_video.Bot')
     async def test_broadcast_saves_date_on_success(
         self,
+        mock_bot_class,
         mock_unified,
         mock_broadcast,
         mock_send,
@@ -170,12 +172,18 @@ class TestEndToEndBroadcast:
     ):
         """Successful broadcast saves the date to prevent duplicates."""
         from send_video import main, DafInfo, VideoInfo
-        
+
         state_dir = tmp_path / ".github" / "state"
         state_dir.mkdir(parents=True)
-        
+
         mock_now = datetime(2026, 2, 2, 3, 0, 0, tzinfo=ISRAEL_TZ)
         mock_datetime.now.return_value = mock_now
+
+        # Mock Bot async context manager
+        mock_bot_instance = AsyncMock()
+        mock_bot_class.return_value = mock_bot_instance
+        mock_bot_instance.__aenter__ = AsyncMock(return_value=mock_bot_instance)
+        mock_bot_instance.__aexit__ = AsyncMock(return_value=False)
 
         mock_daf.return_value = DafInfo(masechta="Berachos", daf=10)
         mock_video.return_value = VideoInfo(
@@ -188,14 +196,14 @@ class TestEndToEndBroadcast:
         mock_send.return_value = None
         mock_broadcast.return_value = (1, 0)
         mock_unified.return_value = None
-        
+
         with patch.dict(os.environ, {
             "GITHUB_WORKSPACE": str(tmp_path),
             "TELEGRAM_BOT_TOKEN": "test-token",
             "TELEGRAM_CHAT_ID": "123",
         }):
             result = await main()
-            
+
             assert result == 0
             # Verify date was saved
             saved_date = get_last_broadcast_date()
@@ -263,12 +271,14 @@ class TestSubscriberDeduplication:
             daf=10
         )
 
+        mock_bot = AsyncMock()
+
         with patch.dict(os.environ, {"GITHUB_WORKSPACE": str(tmp_path)}):
             with patch('send_video.send_to_telegram', new_callable=AsyncMock) as mock_send:
                 mock_send.return_value = None
 
                 # Exclude chat ID 456 (the main chat)
-                success, failed = await broadcast_to_subscribers(video, "token", exclude_chat_id="456")
+                success, failed = await broadcast_to_subscribers(video, mock_bot, exclude_chat_id="456")
 
                 # Should only send to 123 and 789, not 456
                 assert success == 2
@@ -296,12 +306,14 @@ class TestSubscriberDeduplication:
             daf=10
         )
 
+        mock_bot = AsyncMock()
+
         with patch.dict(os.environ, {"GITHUB_WORKSPACE": str(tmp_path)}):
             with patch('send_video.send_to_telegram', new_callable=AsyncMock) as mock_send:
                 mock_send.return_value = None
 
                 # No exclude specified
-                success, failed = await broadcast_to_subscribers(video, "token")
+                success, failed = await broadcast_to_subscribers(video, mock_bot)
 
                 # Should send to both
                 assert success == 2
@@ -324,12 +336,14 @@ class TestSubscriberDeduplication:
             daf=10
         )
 
+        mock_bot = AsyncMock()
+
         with patch.dict(os.environ, {"GITHUB_WORKSPACE": str(tmp_path)}):
             with patch('send_video.send_to_telegram', new_callable=AsyncMock) as mock_send:
                 mock_send.return_value = None
 
                 # Exclude the group chat
-                success, failed = await broadcast_to_subscribers(video, "token", exclude_chat_id="-100456789")
+                success, failed = await broadcast_to_subscribers(video, mock_bot, exclude_chat_id="-100456789")
 
                 # Should only send to 123 and 789
                 assert success == 2
