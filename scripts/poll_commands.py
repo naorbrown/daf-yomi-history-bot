@@ -392,68 +392,190 @@ async def get_todays_daf() -> DafInfo:
         raise ValueError(f"No Daf Yomi found for {today_str}")
 
 
+def _get_masechta_search_names(masechta: str) -> set[str]:
+    """
+    Get all name variants to search for a masechta.
+
+    Different sources use different transliterations (e.g., Menachot vs Menachos).
+    Returns lowercase variants to match against.
+    """
+    names = {masechta.lower()}
+    # Add Hebcal variant (reverse lookup)
+    for hebcal_name, alldaf_name in MASECHTA_NAME_MAP.items():
+        if alldaf_name == masechta:
+            names.add(hebcal_name.lower())
+            break
+    # Also check if masechta IS a Hebcal name that maps to something
+    if masechta in MASECHTA_NAME_MAP:
+        names.add(MASECHTA_NAME_MAP[masechta].lower())
+    return names
+
+
+def _match_daf_in_text(link_text_lower: str, search_names: set[str], daf_num: int) -> bool:
+    """Check if link text matches any masechta name variant + daf number."""
+    for name in search_names:
+        if name not in link_text_lower:
+            continue
+        patterns = [
+            f"{name} {daf_num}",
+            f"{name} daf {daf_num}",
+        ]
+        if any(p in link_text_lower for p in patterns) or re.search(
+            rf"{name}\s+{daf_num}\b", link_text_lower
+        ):
+            return True
+    return False
+
+
+def _get_cached_page_id() -> Optional[int]:
+    """Get the page ID from the last cached video URL."""
+    if VIDEO_CACHE_FILE.exists():
+        try:
+            data = json.loads(VIDEO_CACHE_FILE.read_text())
+            page_url = data.get("page_url", "")
+            match = re.search(r"/p/(\d+)", page_url)
+            if match:
+                return int(match.group(1))
+        except (json.JSONDecodeError, KeyError, ValueError):
+            pass
+    return None
+
+
 async def get_jewish_history_video(daf: DafInfo) -> VideoInfo:
-    """Find the Jewish History video for a specific daf."""
-    masechta_lower = daf.masechta.lower()
+    """
+    Find the Jewish History video for a specific daf.
+
+    Uses a multi-strategy approach:
+    1. Scrape the AllDaf series page with multiple name variants
+    2. Fall back to trying sequential page IDs near the last known video
+    """
+    search_names = _get_masechta_search_names(daf.masechta)
+    logger.info(f"Searching for {daf.masechta} {daf.daf} (variants: {search_names})")
 
     async with httpx.AsyncClient(
         follow_redirects=True, timeout=REQUEST_TIMEOUT
     ) as client:
-        response = await client.get(ALLDAF_SERIES_URL)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+        # Strategy 1: Search the series page
+        page_url, title = await _search_series_page(client, search_names, daf)
 
-        page_url = None
-        title = None
-
-        for link in soup.find_all("a", href=True):
-            href = link["href"]
-            if not href.startswith("/p/"):
-                continue
-
-            link_text = link.get_text().strip()
-            link_text_lower = link_text.lower()
-
-            if masechta_lower not in link_text_lower:
-                continue
-
-            # Check for daf number match
-            patterns = [
-                rf"\b{masechta_lower}\s+{daf.daf}\b",
-                rf"\b{masechta_lower}\s+daf\s+{daf.daf}\b",
-            ]
-
-            if any(re.search(p, link_text_lower) for p in patterns):
-                page_url = f"{ALLDAF_BASE_URL}{href}"
-                title = link_text
-                logger.info(f"Found video: {title}")
-                break
+        # Strategy 2: Try sequential page IDs near the last known video
+        if not page_url:
+            logger.info("Video not found on series page, trying adjacent page IDs...")
+            page_url, title = await _search_adjacent_pages(client, search_names, daf)
 
         if not page_url:
             raise ValueError(f"Video not found for {daf.masechta} {daf.daf}")
 
         # Fetch video page for MP4 URL
-        response = await client.get(page_url)
-        response.raise_for_status()
-
-        video_url = None
-        mp4_pattern = (
-            r"https://(?:cdn\.jwplayer\.com|content\.jwplatform\.com)"
-            r"/videos/([a-zA-Z0-9]+)\.mp4"
-        )
-        mp4_match = re.search(mp4_pattern, response.text)
-
-        if mp4_match:
-            video_url = f"https://cdn.jwplayer.com/videos/{mp4_match.group(1)}.mp4"
-            logger.info(f"Found video URL: {video_url}")
+        logger.info(f"Found video page: {page_url}")
+        video_url = await _extract_video_url(client, page_url)
 
         return VideoInfo(
-            title=title,
+            title=title or f"{daf.masechta} {daf.daf}",
             page_url=page_url,
             video_url=video_url,
             masechta=daf.masechta,
             daf=daf.daf,
         )
+
+
+async def _search_series_page(
+    client: httpx.AsyncClient, search_names: set[str], daf: DafInfo
+) -> tuple[Optional[str], Optional[str]]:
+    """Search the AllDaf series page for the video. Returns (page_url, title)."""
+    try:
+        response = await client.get(ALLDAF_SERIES_URL)
+        response.raise_for_status()
+    except httpx.HTTPError as e:
+        logger.warning(f"Failed to fetch AllDaf series page: {e}")
+        return None, None
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    for link in soup.find_all("a", href=True):
+        href = link["href"]
+        if not href.startswith("/p/"):
+            continue
+
+        link_text = link.get_text().strip()
+        link_text_lower = link_text.lower()
+
+        if _match_daf_in_text(link_text_lower, search_names, daf.daf):
+            logger.info(f"Found video on series page: {link_text}")
+            return f"{ALLDAF_BASE_URL}{href}", link_text
+
+    return None, None
+
+
+async def _search_adjacent_pages(
+    client: httpx.AsyncClient, search_names: set[str], daf: DafInfo
+) -> tuple[Optional[str], Optional[str]]:
+    """Try sequential AllDaf page IDs near the last cached video. Returns (page_url, title)."""
+    last_page_id = _get_cached_page_id()
+    if last_page_id is None:
+        logger.info("No cached page ID available for adjacent search")
+        return None, None
+
+    logger.info(f"Trying page IDs near {last_page_id}...")
+
+    # Try IDs both forward and backward from the last known video
+    offsets = list(range(1, 16)) + list(range(-1, -6, -1))
+
+    for offset in offsets:
+        candidate_id = last_page_id + offset
+        candidate_url = f"{ALLDAF_BASE_URL}/p/{candidate_id}"
+
+        try:
+            response = await client.get(candidate_url)
+            if response.status_code != 200:
+                continue
+
+            page_text_lower = response.text.lower()
+
+            # Quick check: does this page contain the masechta name and daf number?
+            has_name = any(name in page_text_lower for name in search_names)
+            has_daf = str(daf.daf) in page_text_lower
+            if not has_name or not has_daf:
+                continue
+
+            # Verify with stricter matching
+            for name in search_names:
+                if re.search(rf"{name}\s+{daf.daf}\b", page_text_lower):
+                    # Extract title from the page
+                    soup = BeautifulSoup(response.text, "html.parser")
+                    title_tag = soup.find("h1") or soup.find("title")
+                    title = title_tag.get_text().strip() if title_tag else f"{daf.masechta} {daf.daf}"
+                    logger.info(f"Found video via adjacent page ID: {candidate_url} ({title})")
+                    return candidate_url, title
+
+        except httpx.HTTPError:
+            continue
+
+    return None, None
+
+
+async def _extract_video_url(client: httpx.AsyncClient, page_url: str) -> Optional[str]:
+    """Fetch a video page and extract the direct MP4 URL."""
+    try:
+        response = await client.get(page_url)
+        response.raise_for_status()
+    except httpx.HTTPError as e:
+        logger.warning(f"Failed to fetch video page: {e}")
+        return None
+
+    mp4_pattern = (
+        r"https://(?:cdn\.jwplayer\.com|content\.jwplatform\.com)"
+        r"/videos/([a-zA-Z0-9]+)\.mp4"
+    )
+    mp4_match = re.search(mp4_pattern, response.text)
+
+    if mp4_match:
+        video_url = f"https://cdn.jwplayer.com/videos/{mp4_match.group(1)}.mp4"
+        logger.info(f"Found video URL: {video_url}")
+        return video_url
+
+    logger.warning("Could not extract direct video URL, will send link only")
+    return None
 
 
 def parse_command(text: Optional[str]) -> Optional[str]:
